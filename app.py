@@ -1,4 +1,4 @@
-# app_seedling_pro_full.py
+# app_seedling_pro_full_bilingual_fixed.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -13,7 +13,12 @@ import io
 import plotly.express as px
 
 # ---------- Config ----------
-st.set_page_config(page_title="🍎 Seedling Pro Ultimate", layout="wide")
+st.set_page_config(page_title="🍎 Seedling Pro Bilingual", layout="wide")
+
+# ---------- Language Helper ----------
+lang = st.sidebar.selectbox("Language / زبان", ["English", "فارسی"])
+EN = (lang == "English")
+def t(fa, en): return en if EN else fa
 
 # ---------- Styles ----------
 st.markdown("""
@@ -24,11 +29,12 @@ st.markdown("""
 .kpi-value{font-size:28px;font-weight:bold;color:#2d9f3f;}
 .task-done{background:#d1ffd1;}
 .task-pending{background:#ffe6e6;}
+body{font-family: 'Vazir', sans-serif; direction: rtl;}
 </style>
 """, unsafe_allow_html=True)
 
 # ---------- Database ----------
-DB_FILE = "users_seedling_full.db"
+DB_FILE = "users_seedling_full_bilingual_fixed.db"
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
 
@@ -60,9 +66,9 @@ model = load_model_cached("leaf_model.h5")
 
 class_labels = ["apple_healthy", "apple_black_spot", "apple_powdery_mildew"]
 disease_info = {
-    "apple_black_spot": {"name": "Black Spot ⚫️", "desc": "Black spots on leaves/fruit.", "treatment": "Fungicide, prune, remove fallen leaves"},
-    "apple_powdery_mildew": {"name": "Powdery Mildew ❄️", "desc": "White powdery surface on leaves.", "treatment": "Sulfur spray, pruning, ventilation"},
-    "apple_healthy": {"name": "Healthy ✅", "desc": "Leaf is healthy.", "treatment": "Continue standard care"}
+    "apple_black_spot": {"name": t("لکه سیاه ⚫️","Black Spot ⚫️"), "desc": t("لکه‌های سیاه روی برگ و میوه.","Black spots on leaves/fruit."), "treatment": t("قارچ‌کش، هرس و جمع‌آوری برگ‌ها","Fungicide, prune, remove fallen leaves")},
+    "apple_powdery_mildew": {"name": t("سفیدک پودری ❄️","Powdery Mildew ❄️"), "desc": t("سطح برگ سفید و پودری می‌شود.","White powdery surface on leaves."), "treatment": t("گوگرد، هرس و تهویه","Sulfur spray, pruning, ventilation")},
+    "apple_healthy": {"name": t("برگ سالم ✅","Healthy ✅"), "desc": t("برگ سالم است.","Leaf is healthy."), "treatment": t("ادامه مراقبت‌های معمول","Continue standard care")}
 }
 
 def predict_probs(file):
@@ -90,15 +96,19 @@ def register(username, password, role='user'):
         schedule=[]
         for week in range(52):
             date = start_date + timedelta(weeks=week)
-            schedule.append({'username':username,'date':str(date.date()),'height':None,'leaves':None,'notes':None,'prune':None,'task':'Watering','task_done':'False'})
-            if week % 4 == 0: schedule.append({'username':username,'date':str(date.date()),'height':None,'leaves':None,'notes':None,'prune':None,'task':'Fertilization','task_done':'False'})
-            if week % 12 == 0: schedule.append({'username':username,'date':str(date.date()),'height':None,'leaves':None,'notes':None,'prune':None,'task':'Pruning','task_done':'False'})
+            schedule.append({'username':username,'date':str(date.date()),'height':None,'leaves':None,'notes':None,'prune':None,'task':t('آبیاری','Watering'),'task_done':'False'})
+            if week % 4 == 0: schedule.append({'username':username,'date':str(date.date()),'height':None,'leaves':None,'notes':None,'prune':None,'task':t('کوددهی','Fertilization'),'task_done':'False'})
+            if week % 12 == 0: schedule.append({'username':username,'date':str(date.date()),'height':None,'leaves':None,'notes':None,'prune':None,'task':t('هرس','Pruning'),'task_done':'False'})
         for item in schedule: conn.execute(data_table.insert().values(**item))
 
 def login(username, password):
     with engine.begin() as conn:
         r = conn.execute(sa.select(users_table).where(users_table.c.username==username)).first()
-        if r and bcrypt.checkpw(password.encode(), r['password_hash'].encode()): return r['role']
+        if r:
+            stored_hash = r._mapping['password_hash']
+            role = r._mapping['role']
+            if bcrypt.checkpw(password.encode(), stored_hash.encode()):
+                return role
         return None
 
 def load_user_data(username=None):
@@ -107,72 +117,4 @@ def load_user_data(username=None):
             rows = conn.execute(sa.select(data_table).where(data_table.c.username==username)).fetchall()
         else:
             rows = conn.execute(sa.select(data_table)).fetchall()
-    return pd.DataFrame(rows, columns=['id','username','date','height','leaves','notes','prune','task','task_done'])
-
-# ---------- Auth UI ----------
-if st.session_state['user'] is None:
-    mode = st.sidebar.radio("Mode", ["Login", "Sign Up", "Demo"])
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    if mode=="Sign Up" and st.button("Register"):
-        if username and password:
-            register(username, password)
-            st.success("Registered successfully. Please login.")
-        else: st.error("Provide username & password.")
-    if mode=="Login" and st.button("Login"):
-        role = login(username, password)
-        if role:
-            st.session_state['user'] = username
-            st.session_state['role'] = role
-            st.success(f"Login successful ✅ Role: {role}")
-        else:
-            st.error("Wrong username or password.")
-    if mode=="Demo":
-        st.header("Demo Mode")
-        f = st.file_uploader("Upload leaf image", type=["jpg","jpeg","png"])
-        if f:
-            st.image(f, use_column_width=True)
-            preds = predict_probs(f)
-            idx=int(np.argmax(preds))
-            for i,cls in enumerate(class_labels):
-                pct=preds[i]*100
-                color="#2d9f3f" if cls=="apple_healthy" else "#e53935"
-                st.markdown(f"<div style='margin-top:8px'><div style='background:#f1f5f9;border-radius:10px;padding:6px'><div style='background:{color};color:#fff;padding:6px;border-radius:6px;width:{int(pct)}%'>{pct:.1f}% {disease_info[cls]['name']}</div></div></div>",unsafe_allow_html=True)
-            info=disease_info[class_labels[idx]]
-            st.success(f"Result: {info['name']}")
-            st.write(f"Description: {info['desc']}")
-            st.write(f"Treatment: {info['treatment']}")
-
-# ---------- Main App ----------
-if st.session_state['user']:
-    username = st.session_state['user']
-    role = st.session_state.get('role','user')
-    if role=='admin':
-        menu = st.sidebar.selectbox("Admin Menu", ["Dashboard","Users","Download Reports","Logout"])
-        if menu=="Logout":
-            st.session_state['user']=None
-            st.session_state['role']=None
-            st.experimental_rerun()
-        df_all = load_user_data()
-        if menu=="Dashboard":
-            st.header("Admin Dashboard")
-            st.dataframe(df_all)
-            fig = px.bar(df_all.groupby('username').agg({'height':'mean','leaves':'mean'}).reset_index(), x='username', y=['height','leaves'], barmode='group', title='Average Height & Leaves per User')
-            st.plotly_chart(fig, use_container_width=True)
-        if menu=="Users":
-            st.header("User Management")
-            df_users = pd.read_sql(users_table.select(), engine)
-            st.dataframe(df_users)
-        if menu=="Download Reports":
-            st.header("Download All Users Data")
-            buffer=io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                df_all.to_excel(writer, sheet_name='AllUsers', index=False)
-            data=buffer.getvalue()
-            st.download_button("Download Excel", data=data, file_name="all_users_dashboard.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    else:
-        menu = st.sidebar.selectbox("Menu", ["Home","Tracking","Schedule","Disease","Growth Prediction","Download","Logout"])
-        if menu=="Logout":
-            st.session_state['user']=None
-            st.experimental_rerun()
-        df = load_user_data(username)
+    return pd.DataFrame([r._mapping for r in rows])
