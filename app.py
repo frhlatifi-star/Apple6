@@ -1,141 +1,83 @@
-# app_seedling_pro_final_demo.py
-import streamlit as st
-import pandas as pd
-import numpy as np
-from PIL import Image
-import tensorflow as tf
-from tensorflow.keras.utils import img_to_array
-from datetime import datetime, timedelta
-import sqlalchemy as sa
-from sqlalchemy import Column, Integer, String, Table, MetaData
-import bcrypt
-import io
-import plotly.express as px
-import os
+# ادامه کد کامل اپلیکیشن با تمامی بخش‌ها
 
-# ---------- Config ----------
-st.set_page_config(page_title="🍎 Seedling Pro Full Dashboard", layout="wide")
+# ---------- DISEASE ----------
+    if menu == t("🍎 تشخیص بیماری","Disease"):
+        st.header(t("تشخیص بیماری برگ","Leaf Disease Detection"))
+        f = st.file_uploader(t("آپلود تصویر","Upload image"), type=["jpg","jpeg","png"])
+        if f:
+            st.image(f, use_container_width=True)
+            if model is not None:
+                img = Image.open(f).convert("RGB")
+                img = img.resize(model.input_shape[1:3])
+                arr = img_to_array(img)/255.0
+                arr = np.expand_dims(arr, axis=0)
+                preds = model.predict(arr)[0]
+            else:
+                preds = np.array([1.0, 0.0, 0.0])
+            idx = int(np.argmax(preds))
+            st.write(f"**{t('نتیجه','Result')}:** {disease_info[class_labels[idx]]['name']}")
+            st.write(f"**{t('شدت بیماری (%)','Severity (%)')}:** {preds[idx]*100:.1f}%")
+            st.write(f"**{t('توضیح','Description')}:** {disease_info[class_labels[idx]]['desc']}")
+            st.write(f"**{t('درمان / راهنمایی','Treatment / Guidance')}:** {disease_info[class_labels[idx]]['treatment']}")
 
-# ---------- Language Helper ----------
-lang = st.sidebar.selectbox("Language / زبان", ["English", "فارسی"])
-EN = (lang == "English")
-def t(fa, en): return en if EN else fa
+# ---------- TRACKING ----------
+    if menu == t("🌱 ثبت و رصد","Tracking"):
+        st.header(t("ثبت و رصد رشد نهال","Seedling Tracking"))
+        with st.expander(t("➕ ثبت اندازه‌گیری جدید","➕ Add measurement")):
+            date = st.date_input(t("تاریخ","Date"), value=datetime.today())
+            height = st.number_input(t("ارتفاع (cm)","Height (cm)"), min_value=0.0, step=0.5)
+            leaves = st.number_input(t("تعداد برگ‌ها","Leaves"), min_value=0, step=1)
+            notes = st.text_area(t("توضیحات","Notes"))
+            prune = st.checkbox(t("نیاز به هرس؟","Prune needed?"))
+            if st.button(t("ثبت","Submit")):
+                st.session_state['tree_data'] = pd.concat([st.session_state['tree_data'], pd.DataFrame([[date, height, leaves, notes, prune]], columns=['date','height','leaves','notes','prune'])], ignore_index=True)
+                st.success(t("ثبت شد ✅","Added ✅"))
+        if not st.session_state['tree_data'].empty:
+            df = st.session_state['tree_data'].sort_values('date')
+            st.dataframe(df)
+            fig = px.line(df, x='date', y=['height','leaves'], labels={'value':t('مقدار','Value'),'variable':t('پارامتر','Parameter'),'date':t('تاریخ','Date')})
+            st.plotly_chart(fig, use_container_width=True)
 
-# ---------- Styles ----------
-st.markdown("""
-<style>
-.kpi-card{background:#ffffffdd;border-radius:14px;padding:14px;margin-bottom:16px;box-shadow:0 6px 20px rgba(0,0,0,0.15);transition:transform 0.2s;}
-.kpi-card:hover{transform:scale(1.03);}
-.kpi-title{font-size:16px;font-weight:bold;color:#333;}
-.kpi-value{font-size:28px;font-weight:bold;color:#2d9f3f;}
-.task-done{background:#d1ffd1;}
-.task-pending{background:#ffe6e6;}
-body{font-family: 'Vazir', sans-serif; direction: rtl;}
-</style>
-""", unsafe_allow_html=True)
+# ---------- SCHEDULE ----------
+    if menu == t("📅 برنامه زمان‌بندی","Schedule"):
+        st.header(t("برنامه زمان‌بندی","Schedule"))
+        df_s = st.session_state['schedule']
+        today = datetime.today().date()
+        for i in df_s.index:
+            df_s.at[i,'task_done'] = st.checkbox(f"{df_s.at[i,'date']} — {df_s.at[i,'task']}", value=df_s.at[i,'task_done'], key=f"sch{i}")
+        st.dataframe(df_s)
 
-# ---------- Database (Persistent) ----------
-DB_DIR = os.path.join(os.getcwd(), "data")
-os.makedirs(DB_DIR, exist_ok=True)
-DB_FILE = os.path.join(DB_DIR, "users_seedling_final_demo.db")
-engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
-meta = MetaData()
+# ---------- PREDICTION ----------
+    if menu == t("📈 پیش‌بینی رشد","Prediction"):
+        st.header(t("پیش‌بینی رشد","Growth Prediction"))
+        df = st.session_state['tree_data']
+        if df.empty:
+            st.info(t("ابتدا اندازه‌گیری‌های رشد را ثبت کنید.","Add growth records first."))
+        else:
+            df = df.sort_values('date')
+            df['days'] = (df['date'] - df['date'].min()).dt.days
+            X = df['days'].values
+            y = df['height'].values
+            if len(X) < 2: f_lin = lambda z: y[-1]
+            else: a = (y[-1]-y[0])/(X[-1]-X[0]); b = y[0]-a*X[0]; f_lin = lambda z: a*z+b
+            future_days = np.array([(X.max() + 7*i) for i in range(1,13)])
+            future_dates = [df['date'].max() + timedelta(weeks=i) for i in range(1,13)]
+            preds = [f_lin(d) for d in future_days]
+            df_future = pd.DataFrame({'date':future_dates, t('ارتفاع پیش‌بینی شده(cm)','Predicted Height (cm)'): preds})
+            st.session_state['df_future'] = df_future
+            st.dataframe(df_future)
+            fig = px.line(df_future, x='date', y=df_future.columns[1], title=t("پیش‌بینی ارتفاع","Height forecast"))
+            st.plotly_chart(fig, use_container_width=True)
 
-users_table = Table('users', meta,
-                    Column('id', Integer, primary_key=True),
-                    Column('username', String, unique=True, nullable=False),
-                    Column('password_hash', String, nullable=False),
-                    Column('role', String, default='user'))
-
-data_table = Table('user_data', meta,
-                   Column('id', Integer, primary_key=True),
-                   Column('username', String),
-                   Column('date', String),
-                   Column('height', Integer),
-                   Column('leaves', Integer),
-                   Column('notes', String),
-                   Column('prune', String),
-                   Column('task', String),
-                   Column('task_done', String))
-
-meta.create_all(engine)
-
-# ---------- Session ----------
-if 'user' not in st.session_state: st.session_state['user'] = None
-if 'role' not in st.session_state: st.session_state['role'] = None
-if 'tree_data' not in st.session_state: st.session_state['tree_data'] = pd.DataFrame(columns=['date','height','leaves','notes','prune'])
-if 'schedule' not in st.session_state: st.session_state['schedule'] = pd.DataFrame(columns=['date','task','task_done'])
-if 'df_future' not in st.session_state: st.session_state['df_future'] = pd.DataFrame()
-
-# ---------- Auth Functions ----------
-def register(username, password, role='user'):
-    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-    with engine.begin() as conn:
-        conn.execute(users_table.insert().values(username=username, password_hash=hashed, role=role))
-
-def login(username, password):
-    with engine.begin() as conn:
-        r = conn.execute(sa.select(users_table).where(users_table.c.username==username)).first()
-        if r:
-            stored_hash = r._mapping['password_hash']
-            role = r._mapping['role']
-            if bcrypt.checkpw(password.encode(), stored_hash.encode()):
-                return role
-        return None
-
-def load_user_data(username):
-    with engine.begin() as conn:
-        rows = conn.execute(sa.select(data_table).where(data_table.c.username==username)).fetchall()
-    df = pd.DataFrame([r._mapping for r in rows])
-    if not df.empty:
-        st.session_state['tree_data'] = df[['date','height','leaves','notes','prune']]
-        st.session_state['schedule'] = df[['date','task','task_done']]
-    else:
-        st.session_state['tree_data'] = pd.DataFrame(columns=['date','height','leaves','notes','prune'])
-        start_date = datetime.today()
-        schedule_list = []
-        for week in range(52):
-            date = start_date + timedelta(weeks=week)
-            schedule_list.append([date.date(), t("آبیاری","Watering"), False])
-            if week % 4 == 0: schedule_list.append([date.date(), t("کوددهی","Fertilization"), False])
-            if week % 12 == 0: schedule_list.append([date.date(), t("هرس","Pruning"), False])
-            if week % 6 == 0: schedule_list.append([date.date(), t("بازرسی بیماری","Disease Check"), False])
-        st.session_state['schedule'] = pd.DataFrame(schedule_list, columns=['date','task','task_done'])
-
-# ---------- Auth UI ----------
-mode = st.sidebar.radio(t("حالت","Mode"), [t("ورود","Login"), t("ثبت نام","Sign Up"), t("دمو","Demo")])
-username = st.text_input(t("نام کاربری","Username"))
-password = st.text_input(t("رمز عبور","Password"), type="password")
-
-if mode == t("ثبت نام","Sign Up") and st.button(t("ثبت نام","Register")):
-    if username and password:
-        register(username, password)
-        st.success(t("ثبت نام انجام شد. اکنون وارد شوید.","Registered successfully. Please login."))
-    else:
-        st.error(t("نام کاربری و رمز را وارد کنید.","Provide username & password."))
-
-if mode == t("ورود","Login") and st.button(t("ورود","Login")):
-    role = login(username, password)
-    if role:
-        st.session_state['user'] = username
-        st.session_state['role'] = role
-        if 'tree_data' not in st.session_state:
-            st.session_state['tree_data'] = pd.DataFrame(columns=['date','height','leaves','notes','prune'])
-        if 'schedule' not in st.session_state:
-            st.session_state['schedule'] = pd.DataFrame(columns=['date','task','task_done'])
-        load_user_data(username)
-        st.success(t("ورود موفق ✅","Login successful ✅"))
-
-# ---------- Demo Mode ----------
-if mode == t("دمو","Demo"):
-    st.header(t("دمو","Demo"))
-    st.info(t("در حالت دمو بدون ثبت نام می‌توانید تصویر آپلود کنید و مدل (در صورت وجود) را تست کنید.","In demo mode you can upload image and test model without login."))
-    f = st.file_uploader(t("آپلود تصویر برگ","Upload leaf image"), type=["jpg","jpeg","png"])
-    if f:
-        st.image(f, use_column_width=True)
-        st.write(t("پیش‌بینی بیماری (Demo)","Disease prediction (Demo)"))
-
-# ---------- Dashboard for Logged-in Users ----------
-if st.session_state['user'] and mode != t("دمو","Demo"):
-    st.write(f"{t('خوش آمدید','Welcome')}, {st.session_state['user']}!")
-    # اینجا تمام بخش‌های Home, Tracking, Schedule, Prediction, Download و Logout اضافه شوند
+# ---------- DOWNLOAD ----------
+    if menu == t("📥 دانلود گزارش","Download"):
+        st.header(t("دانلود گزارش","Download"))
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            if not st.session_state['tree_data'].empty:
+                st.session_state['tree_data'].to_excel(writer, sheet_name='growth', index=False)
+            if not st.session_state['schedule'].empty:
+                st.session_state['schedule'].to_excel(writer, sheet_name='schedule', index=False)
+            if not st.session_state['df_future'].empty:
+                st.session_state['df_future'].to_excel(writer, sheet_name='prediction', index=False)
+        st.download_button(label=t("دانلود Excel داشبورد","Download Excel Dashboard"), data=buffer.getvalue(), file_name="apple_dashboard_full.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
