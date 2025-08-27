@@ -1,55 +1,42 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 160" width="440" height="160">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 160" width="420" height="160">
   <defs>
-    <!-- گرادینت سیب -->
-    <linearGradient id="appleGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#FF4B50"/>
-      <stop offset="100%" stop-color="#FF7A5A"/>
+    <!-- گرادینت رنگ سیب -->
+    <linearGradient id="appleGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF4E50"/>
+      <stop offset="100%" stop-color="#FC913A"/>
     </linearGradient>
-
     <!-- گرادینت برگ -->
-    <linearGradient id="leafGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#9DE55A"/>
-      <stop offset="100%" stop-color="#3CAB2E"/>
+    <linearGradient id="leafGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A8E063"/>
+      <stop offset="100%" stop-color="#56AB2F"/>
     </linearGradient>
-
-    <!-- هایلایت نرم -->
-    <radialGradient id="highlight" cx="30%" cy="30%" r="50%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35"/>
-      <stop offset="100%" stop-color="transparent"/>
-    </radialGradient>
-
-    <!-- سایه سازگارتر -->
-    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
-      <feOffset dx="0" dy="4" result="offsetblur"/>
-      <feMerge>
-        <feMergeNode/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
   </defs>
 
-  <!-- زمینه شفاف -->
-  <rect width="440" height="160" rx="24" fill="transparent"/>
-
   <!-- سیب مینیمال -->
-  <g transform="translate(60,30)" filter="url(#shadow)">
-    <!-- فرم اصلی سیب -->
-    <path d="M60 20 C35 20, 15 45, 15 75 C15 110, 40 135, 70 135 C100 135, 125 110, 125 75 C125 45, 105 20, 80 20 C75 10, 65 10, 60 20 Z"
-          fill="url(#appleGrad)"/>
-    <!-- هایلایت -->
-    <ellipse cx="55" cy="45" rx="22" ry="12" fill="url(#highlight)"/>
+  <g transform="translate(60,25)">
+    <path d="M60 20 
+             C35 20, 15 45, 15 75 
+             C15 110, 40 135, 70 135 
+             C100 135, 125 110, 125 75 
+             C125 45, 105 20, 80 20 
+             C75 10, 65 10, 60 20 Z" 
+          fill="url(#appleGradient)" />
+
     <!-- ساقه -->
-    <rect x="57" y="5" width="6" height="15" rx="2" fill="#5A3825"/>
+    <rect x="57" y="5" width="6" height="15" rx="2" fill="#4B2E18"/>
+
     <!-- برگ -->
-    <path d="M72 5 C90 -5, 115 15, 95 35 C75 50, 60 25, 72 5 Z" fill="url(#leafGrad)"/>
+    <path d="M72 5 
+             C90 -5, 115 15, 95 35 
+             C75 50, 60 25, 72 5 Z"
+          fill="url(#leafGradient)" />
   </g>
 
-  <!-- متن برندینگ -->
-  <g transform="translate(180,70)">
-    <text x="0" y="0" font-family="Poppins, Arial, sans-serif" font-size="38" font-weight="700"
-          fill="#1E293B" letter-spacing="1.2px">Seedling Pro</text>
-    <text x="0" y="38" font-family="Vazir, Tahoma, sans-serif" font-size="18" font-weight="600"
-          fill="#475569" direction="rtl" unicode-bidi="bidi-override">داشبورد هوشمند نهال سیب</text>
+  <!-- متن -->
+  <g transform="translate(170,70)">
+    <text x="0" y="0" font-family="Poppins, Arial, sans-serif"
+          font-size="36" font-weight="700" fill="#1E293B" letter-spacing="1">Seedling Pro</text>
+    <text x="0" y="34" font-family="Vazir, Tahoma, sans-serif"
+          font-size="18" font-weight="600" fill="#475569">داشبورد هوشمند نهال سیب</text>
   </g>
 </svg>
