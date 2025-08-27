@@ -1,42 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 160" width="700" height="160">
+<!-- logo.svg -->
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="64" viewBox="0 0 240 64">
   <defs>
-    <linearGradient id="appleGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ff5f6d"/>
-      <stop offset="100%" stop-color="#ff2a36"/>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ff9266"/>
+      <stop offset="1" stop-color="#ff6a45"/>
     </linearGradient>
-    <linearGradient id="leafGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#9be15d"/>
-      <stop offset="100%" stop-color="#3aa14c"/>
-    </linearGradient>
-    <radialGradient id="shine" cx="30%" cy="30%" r="50%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.7"/>
-      <stop offset="100%" stop-color="transparent"/>
-    </radialGradient>
-    <filter id="shadow" x="-40%" y="-40%" width="200%" height="200%">
-      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity="0.25"/>
-    </filter>
   </defs>
+  <rect rx="12" width="240" height="64" fill="#ffffff" opacity="0.0"/>
+  <!-- apple shape -->
+  <g transform="translate(8,4)">
+    <path d="M28 6c-4-2-9 0-11 3s-2 7 1 10 6 5 11 4 8-5 9-9-3-7-10-8z" fill="url(#g)"/>
+    <path d="M26 2c1 1 3 1 4 0 0 0 1-1 1-2s-1-1-2-1-3 0-3 1-0 1 0 2z" fill="#2d9f3f"/>
+    <circle cx="22" cy="14" r="1.6" fill="#ffffff" opacity="0.25"/>
+  </g>
 
-  <!-- زمینه -->
-  <rect width="700" height="160" rx="24" fill="#fff"/>
-
-  <!-- گروه کلی برای وسط‌چین -->
-  <g transform="translate(350,80)">
-    <!-- سیب -->
-    <g transform="translate(-160,-40)" filter="url(#shadow)">
-      <path d="M50,20 C30,20 20,40 20,65 C20,95 40,120 65,120 C90,120 110,95 110,65 C110,40 95,20 75,20 C68,10 57,10 50,20 Z"
-            fill="url(#appleGrad)"/>
-      <ellipse cx="55" cy="45" rx="20" ry="12" fill="url(#shine)"/>
-      <rect x="48" y="8" width="6" height="14" rx="2" fill="#5a3825"/>
-      <path d="M70,5 C85,0 100,15 85,28 C70,40 55,20 70,5 Z" fill="url(#leafGrad)"/>
-    </g>
-
-    <!-- متن -->
-    <g transform="translate(40,0)">
-      <text x="0" y="-10" font-family="Poppins, Arial, sans-serif"
-            font-size="36" font-weight="700" fill="#052235">Seedling Pro</text>
-      <text x="0" y="26" font-family="Vazir, Tahoma, sans-serif"
-            font-size="18" font-weight="600" fill="#475569">داشبورد هوشمند نهال سیب</text>
-    </g>
+  <!-- text -->
+  <g transform="translate(72,14)">
+    <text x="0" y="18" font-family="Vazir, Arial, sans-serif" font-size="20" font-weight="700" fill="#052235">Seedling Pro</text>
+    <text x="0" y="36" font-family="Vazir, Arial, sans-serif" font-size="12" fill="#334155">داشبورد نهال سیب</text>
   </g>
 </svg>
