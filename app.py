@@ -1,4 +1,4 @@
-# app_seedling_pro_full_complete_final.py
+# app_seedling_pro_full_complete_dashboard.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -13,7 +13,7 @@ import io
 import plotly.express as px
 
 # ---------- Config ----------
-st.set_page_config(page_title="🍎 Seedling Pro Full", layout="wide")
+st.set_page_config(page_title="🍎 Seedling Pro Full Dashboard", layout="wide")
 
 # ---------- Language Helper ----------
 lang = st.sidebar.selectbox("Language / زبان", ["English", "فارسی"])
@@ -34,7 +34,7 @@ body{font-family: 'Vazir', sans-serif; direction: rtl;}
 """, unsafe_allow_html=True)
 
 # ---------- Database ----------
-DB_FILE = "users_seedling_full_complete_final.db"
+DB_FILE = "users_seedling_full_complete_dashboard.db"
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
 
@@ -113,7 +113,16 @@ def load_user_data(username):
         st.session_state['schedule'] = df[['date','task','task_done']]
     else:
         st.session_state['tree_data'] = pd.DataFrame(columns=['date','height','leaves','notes','prune'])
-        st.session_state['schedule'] = pd.DataFrame(columns=['date','task','task_done'])
+        # Initialize schedule
+        start_date = datetime.today()
+        schedule_list = []
+        for week in range(52):
+            date = start_date + timedelta(weeks=week)
+            schedule_list.append([date.date(), t("آبیاری","Watering"), False])
+            if week % 4 == 0: schedule_list.append([date.date(), t("کوددهی","Fertilization"), False])
+            if week % 12 == 0: schedule_list.append([date.date(), t("هرس","Pruning"), False])
+            if week % 6 == 0: schedule_list.append([date.date(), t("بازرسی بیماری","Disease Check"), False])
+        st.session_state['schedule'] = pd.DataFrame(schedule_list, columns=['date','task','task_done'])
 
 # ---------- Auth UI ----------
 if st.session_state['user'] is None:
@@ -155,10 +164,19 @@ if st.session_state['user'] is None:
 # ---------- Main App ----------
 else:
     menu = st.sidebar.selectbox(t("منو","Menu"), [t("🏠 خانه","Home"), t("🍎 تشخیص بیماری","Disease"), t("🌱 ثبت و رصد","Tracking"), t("📅 برنامه زمان‌بندی","Schedule"), t("📈 پیش‌بینی رشد","Prediction"), t("📥 دانلود گزارش","Download"), t("🚪 خروج","Logout")])
-    
     if menu == t("🚪 خروج","Logout"):
         st.session_state['user'] = None
         st.experimental_rerun()
+
+    # ---------- Home ----------
+    if menu == t("🏠 خانه","Home"):
+        st.header(t("داشبورد","Dashboard"))
+        df = st.session_state['tree_data']
+        last = df.iloc[-1] if not df.empty else None
+        c1,c2,c3 = st.columns(3)
+        with c1: st.metric(t("ارتفاع آخرین اندازه","Last Height"), f"{last['height']} cm" if last is not None else "--")
+        with c2: st.metric(t("تعداد برگ‌ها","Leaves"), f"{last['leaves']}" if last is not None else "--")
+        with c3: st.metric(t("هشدار هرس","Prune Status"), t("⚠️ نیاز به هرس","⚠️ Prune needed") if last is not None and last['prune'] else t("✅ سالم","✅ Healthy"))
 
     # ---------- Tracking ----------
     if menu == t("🌱 ثبت و رصد","Tracking"):
