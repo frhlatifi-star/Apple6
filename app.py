@@ -1,4 +1,4 @@
-# app_seedling_pro_fixed_rerun.py
+# app_seedling_pro_final.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -37,7 +37,7 @@ body{font-family: 'Vazir', sans-serif; direction: rtl;}
 # ---------- Database (Persistent) ----------
 DB_DIR = os.path.join(os.getcwd(), "data")
 os.makedirs(DB_DIR, exist_ok=True)
-DB_FILE = os.path.join(DB_DIR, "users_seedling_fixed_rerun.db")
+DB_FILE = os.path.join(DB_DIR, "users_seedling_final.db")
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
 
@@ -92,7 +92,6 @@ def load_user_data(username):
         st.session_state['schedule'] = df[['date','task','task_done']]
     else:
         st.session_state['tree_data'] = pd.DataFrame(columns=['date','height','leaves','notes','prune'])
-        # Initialize schedule
         start_date = datetime.today()
         schedule_list = []
         for week in range(52):
@@ -103,7 +102,7 @@ def load_user_data(username):
             if week % 6 == 0: schedule_list.append([date.date(), t("بازرسی بیماری","Disease Check"), False])
         st.session_state['schedule'] = pd.DataFrame(schedule_list, columns=['date','task','task_done'])
 
-# ---------- Auth UI with Safe Rerun ----------
+# ---------- Auth UI ----------
 mode = st.sidebar.radio(t("حالت","Mode"), [t("ورود","Login"), t("ثبت نام","Sign Up"), t("دمو","Demo")])
 username = st.text_input(t("نام کاربری","Username"))
 password = st.text_input(t("رمز عبور","Password"), type="password")
@@ -120,15 +119,12 @@ if mode == t("ورود","Login") and st.button(t("ورود","Login")):
     if role:
         st.session_state['user'] = username
         st.session_state['role'] = role
-
         if 'tree_data' not in st.session_state:
             st.session_state['tree_data'] = pd.DataFrame(columns=['date','height','leaves','notes','prune'])
         if 'schedule' not in st.session_state:
             st.session_state['schedule'] = pd.DataFrame(columns=['date','task','task_done'])
-
         load_user_data(username)
-        # به جای st.experimental_rerun از query params استفاده می‌کنیم
-        st.experimental_set_query_params(user=username)
         st.success(t("ورود موفق ✅","Login successful ✅"))
+        st.experimental_rerun()  # session state بروز می‌شود و اپ دوباره بارگذاری می‌شود
     else:
         st.error(t("نام کاربری یا رمز اشتباه است.","Wrong username or password."))
