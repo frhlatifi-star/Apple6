@@ -18,12 +18,12 @@
   </defs>
 
   <!-- زمینه -->
-  <rect width="700" height="160" rx="24" fill="transparent"/>
+  <rect width="700" height="160" rx="24" fill="#fff"/>
 
-  <!-- گروه مادر برای وسط چین کردن -->
+  <!-- گروه کلی برای وسط‌چین -->
   <g transform="translate(350,80)">
     <!-- سیب -->
-    <g transform="translate(-140,-40)" filter="url(#shadow)">
+    <g transform="translate(-160,-40)" filter="url(#shadow)">
       <path d="M50,20 C30,20 20,40 20,65 C20,95 40,120 65,120 C90,120 110,95 110,65 C110,40 95,20 75,20 C68,10 57,10 50,20 Z"
             fill="url(#appleGrad)"/>
       <ellipse cx="55" cy="45" rx="20" ry="12" fill="url(#shine)"/>
@@ -33,11 +33,9 @@
 
     <!-- متن -->
     <g transform="translate(40,0)">
-      <text x="0" y="-10" text-anchor="start"
-            font-family="Poppins, Arial, sans-serif"
-            font-size="36" font-weight="700" fill="#052235" letter-spacing="1.2">Seedling Pro</text>
-      <text x="0" y="26" text-anchor="start"
-            font-family="Vazir, Tahoma, sans-serif"
+      <text x="0" y="-10" font-family="Poppins, Arial, sans-serif"
+            font-size="36" font-weight="700" fill="#052235">Seedling Pro</text>
+      <text x="0" y="26" font-family="Vazir, Tahoma, sans-serif"
             font-size="18" font-weight="600" fill="#475569">داشبورد هوشمند نهال سیب</text>
     </g>
   </g>
