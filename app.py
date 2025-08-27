@@ -1,3 +1,4 @@
+# app.py (FULL, SQLite + bcrypt + final UI)
 import streamlit as st
 import tensorflow as tf
 from tensorflow.keras.utils import img_to_array
@@ -7,232 +8,278 @@ import pandas as pd
 from datetime import datetime, timedelta
 import io
 import plotly.express as px
+import sqlalchemy as sa
+from sqlalchemy import Column, Integer, String, Table, MetaData
+import bcrypt
+import os
+import json
 
-# ---------------- صفحه و CSS ----------------
-st.set_page_config(
-    page_title="🍎 داشبورد حرفه‌ای نهال سیب",
-    page_icon="🍎",
-    layout="wide"
-)
+# ---------- Config ----------
+st.set_page_config(page_title="🍎 Seedling Pro", page_icon="🍎", layout="wide")
+
+# ---------- Styles ----------
 st.markdown("""
 <style>
 @import url('https://cdn.jsdelivr.net/gh/rastikerdar/vazir-font@v30.1.0/dist/font-face.css');
-body {font-family: 'Vazir', sans-serif; direction: rtl; 
-      background-image: url('https://images.unsplash.com/photo-1567306226416-28f0efdc88ce?auto=format&fit=crop&w=1470&q=80');
-      background-size: cover; background-attachment: fixed;}
-h1,h2,h3,h4,h5,h6 {color:#ffffff; text-shadow:2px 2px 6px rgba(0,0,0,0.6);}
-.stButton>button {background-color: #38a169; color: white; border-radius: 12px; padding: 0.6em 1.2em; font-size: 16px; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);}
-.kpi-card {background:rgba(255,255,255,0.9); border-radius:15px; padding:15px; margin:10px; box-shadow:2px 2px 15px rgba(0,0,0,0.2); transition:0.3s;}
-.kpi-card:hover {transform: scale(1.05);}
-.card-title {font-weight:bold; font-size:18px; margin-bottom:5px;}
-.card-value {font-size:24px; color:#2d3748;}
-.progress-bar {height:25px; border-radius:12px; background:#e2e8f0; overflow:hidden;}
-.progress-fill {height:100%; text-align:center; color:white; line-height:25px; font-weight:bold; transition: width 1s;}
-.logo {text-align:center; margin-bottom:20px;}
+:root{--accent:#2d9f3f;--card-bg:rgba(255,255,255,0.95)}
+body{font-family:'Vazir',sans-serif;direction:rtl;
+background-image: linear-gradient(180deg, #e6f2ea 0%, #d9eef0 40%, #cfeef0 100%), url('https://images.unsplash.com/photo-1506806732259-39c2d0268443?auto=format&fit=crop&w=1470&q=80');
+background-size:cover;background-attachment:fixed;color:#0f172a;}
+.kpi-card{background:var(--card-bg);border-radius:12px;padding:12px;box-shadow:0 8px 24px rgba(7,10,25,0.08);margin-bottom:8px}
+.section{background:linear-gradient(180deg, rgba(255,255,255,0.86), rgba(255,255,255,0.78));border-radius:12px;padding:12px}
+.logo-row{display:flex;align-items:center;gap:10px}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- زبان ----------------
-lang = st.sidebar.selectbox("🌐 زبان / Language", ["فارسی", "English"])
-def t(fa, en):
-    return fa if lang=="فارسی" else en
+# ---------- Helpers & Translations ----------
+lang = st.sidebar.selectbox("🌐 Language / زبان", ["فارسی", "English"])
+EN = (lang == "English")
+def t(fa, en): return en if EN else fa
 
-# ---------------- لوگو ----------------
-st.markdown(f"<div class='logo'><h1>🍎 {t('داشبورد نهال سیب','Apple Seedling Dashboard')}</h1></div>", unsafe_allow_html=True)
+# ---------- Logo display ----------
+logo_path = "logo.svg"
+if os.path.exists(logo_path):
+    # embed svg
+    with open(logo_path, 'r', encoding='utf-8') as f:
+        svg = f.read()
+    st.markdown(f"<div class='logo-row'>{svg}</div>", unsafe_allow_html=True)
+else:
+    st.markdown(f"<h1>🍎 Seedling Pro — {t('داشبورد نهال سیب','Apple Seedling Dashboard')}</h1>")
 
-# ---------------- مدل ----------------
+# ---------- Model loading ----------
 @st.cache_resource
-def load_model():
-    return tf.keras.models.load_model("leaf_model.h5")
-model = load_model()
+def load_model_cached(path="leaf_model.h5"):
+    try:
+        return tf.keras.models.load_model(path)
+    except Exception as e:
+        return None
+
+model = load_model_cached("leaf_model.h5")
+if model is None:
+    st.info(t("مدل تشخیص پیدا نشد؛ بخش تشخیص غیرفعال است. برای فعال‌سازی فایل leaf_model.h5 را قرار دهید.","Detection model not found; place leaf_model.h5 to enable detection."))
+
+# ---------- disease metadata ----------
 class_labels = ["apple_healthy", "apple_black_spot", "apple_powdery_mildew"]
 disease_info = {
-    "apple_black_spot": {"name":"لکه سیاه ⚫️","desc":"لکه‌های سیاه روی برگ و میوه.","treatment":"قارچ‌کش، هرس شاخه‌ها و جمع‌آوری برگ‌ها"},
-    "apple_powdery_mildew":{"name":"سفیدک پودری ❄️","desc":"برگ‌ها سفید و پودری می‌شوند.","treatment":"قارچ‌کش گوگردی، هرس و تهویه باغ"},
-    "apple_healthy":{"name":"برگ سالم ✅","desc":"برگ سالم است.","treatment":"ادامه مراقبت‌های معمول"}
+    "apple_black_spot": {"name": t("لکه سیاه ⚫️","Black Spot ⚫️"), "desc": t("لکه‌های سیاه روی برگ و میوه.","Black spots on leaves/fruit."), "treatment": t("قارچ‌کش، هرس و جمع‌آوری برگ‌ها","Fungicide, prune, remove fallen leaves")},
+    "apple_powdery_mildew": {"name": t("سفیدک پودری ❄️","Powdery Mildew ❄️"), "desc": t("سطح برگ سفید و پودری می‌شود.","White powdery surface on leaves."), "treatment": t("گوگرد، هرس و تهویه","Sulfur spray, pruning, ventilation")},
+    "apple_healthy": {"name": t("برگ سالم ✅","Healthy ✅"), "desc": t("برگ سالم است.","Leaf is healthy."), "treatment": t("ادامه مراقبت‌های معمول","Continue standard care")}
 }
+
 def predict_probs(file):
+    if model is None:
+        # fallback demo: uniform or healthy
+        return np.array([1.0, 0.0, 0.0])
     img = Image.open(file).convert("RGB")
     target_size = model.input_shape[1:3]
     img = img.resize(target_size)
-    array = img_to_array(img)/255.0
-    array = np.expand_dims(array, axis=0)
-    return model.predict(array)[0]
+    arr = img_to_array(img)/255.0
+    arr = np.expand_dims(arr, axis=0)
+    preds = model.predict(arr)[0]
+    return preds
 
-# ---------------- فرم Login/Signup ----------------
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
-if 'users' not in st.session_state:
-    st.session_state['users'] = {}
+# ---------- SQLite (SQLAlchemy) for users ----------
+DB_FILE = "users.db"
+engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
+meta = MetaData()
+users_table = Table('users', meta,
+                    Column('id', Integer, primary_key=True),
+                    Column('username', String, unique=True, nullable=False),
+                    Column('password_hash', String, nullable=False))
+meta.create_all(engine)
+conn = engine.connect()
 
-if not st.session_state['logged_in']:
-    tab = st.sidebar.radio(t("حالت","Mode"), [t("ورود","Login"), t("ثبت نام","Sign Up"), t("دمو","Demo")])
-    
-    if tab==t("ثبت نام","Sign Up"):
-        st.subheader(t("ثبت نام کاربر جدید","Register New User"))
+# ---------- Session state init ----------
+if 'user' not in st.session_state: st.session_state['user'] = None
+if 'tree_data' not in st.session_state:
+    st.session_state['tree_data'] = pd.DataFrame(columns=['تاریخ','ارتفاع(cm)','تعداد برگ','توضیحات','هشدار هرس'])
+if 'schedule' not in st.session_state:
+    # initialize schedule once
+    start_date = datetime.today()
+    schedule_list = []
+    for week in range(52):
+        date = start_date + timedelta(weeks=week)
+        schedule_list.append([date.date(), t("آبیاری","Watering"), t("آبیاری منظم","Regular watering"), False])
+        if week % 4 == 0:
+            schedule_list.append([date.date(), t("کوددهی","Fertilization"), t("تغذیه متعادل","Balanced feeding"), False])
+        if week % 12 == 0:
+            schedule_list.append([date.date(), t("هرس","Pruning"), t("هرس شاخه‌های اضافه یا خشک","Prune extra/dry branches"), False])
+        if week % 6 == 0:
+            schedule_list.append([date.date(), t("بازرسی بیماری","Disease Check"), t("بررسی برگ‌ها","Check leaves for disease"), False])
+    st.session_state['schedule'] = pd.DataFrame(schedule_list, columns=['تاریخ','فعالیت','توضیحات','انجام شد'])
+
+# ---------- Auth UI ----------
+if st.session_state['user'] is None:
+    mode = st.sidebar.radio(t("حالت","Mode"), (t("ورود","Login"), t("ثبت نام","Sign Up"), t("دمو","Demo")))
+    if mode == t("ثبت نام","Sign Up"):
+        st.header(t("ثبت نام","Sign Up"))
         username = st.text_input(t("نام کاربری","Username"))
         password = st.text_input(t("رمز عبور","Password"), type="password")
-        if st.button(t("ثبت نام","Sign Up")):
-            if username in st.session_state['users']:
-                st.error(t("نام کاربری موجود است","Username already exists"))
+        if st.button(t("ثبت نام","Register")):
+            if not username or not password:
+                st.error(t("نام کاربری و رمز را وارد کنید.","Provide username & password."))
             else:
-                st.session_state['users'][username] = password
-                st.success(t("ثبت نام با موفقیت انجام شد","Registered successfully"))
-    
-    elif tab==t("ورود","Login"):
-        st.subheader(t("ورود کاربر","User Login"))
+                # check existence
+                sel = sa.select(users_table).where(users_table.c.username == username)
+                r = conn.execute(sel).first()
+                if r:
+                    st.error(t("نام کاربری قبلا ثبت شده است.","Username already exists."))
+                else:
+                    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+                    ins = users_table.insert().values(username=username, password_hash=hashed)
+                    conn.execute(ins)
+                    st.success(t("ثبت نام انجام شد. اکنون وارد شوید.","Registered. Please login."))
+    elif mode == t("ورود","Login"):
+        st.header(t("ورود","Login"))
         username = st.text_input(t("نام کاربری","Username"))
         password = st.text_input(t("رمز عبور","Password"), type="password")
         if st.button(t("ورود","Login")):
-            if username in st.session_state['users'] and st.session_state['users'][username]==password:
-                st.session_state['logged_in'] = True
-                st.success(t("ورود موفق ✅","Login successful ✅"))
+            sel = sa.select(users_table).where(users_table.c.username == username)
+            r = conn.execute(sel).first()
+            if not r:
+                st.error(t("نام کاربری وجود ندارد.","Username not found."))
             else:
-                st.error(t("نام کاربری یا رمز عبور اشتباه است","Wrong username or password"))
-    
-    elif tab==t("دمو","Demo"):
-        st.subheader(t("دمو - آپلود تصویر نمونه","Demo - Upload Sample Image"))
-        uploaded_file = st.file_uploader(t("📸 آپلود تصویر برگ","Upload Leaf Image"), type=["jpg","jpeg","png"])
-        if uploaded_file:
-            st.image(uploaded_file, caption=t("تصویر آپلود شده","Uploaded Image"), use_column_width=True)
-            probs = predict_probs(uploaded_file)
-            label_idx = np.argmax(probs)
-            label = class_labels[label_idx]
-            st.write(t("احتمال بیماری (٪)","Disease probability (%)"))
-            for i, c in enumerate(class_labels):
-                st.write(f"{disease_info[c]['name']}: {probs[i]*100:.1f}%")
-            info = disease_info[label]
+                stored = r['password_hash']
+                if bcrypt.checkpw(password.encode(), stored.encode()):
+                    st.session_state['user'] = username
+                    st.success(t("ورود موفق ✅","Login successful ✅"))
+                else:
+                    st.error(t("رمز صحیح نیست.","Wrong password."))
+    else:
+        # Demo mode — allow quick upload and test
+        st.header(t("دمو","Demo"))
+        st.info(t("در حالت دمو بدون ثبت نام می‌توانید تصویر آپلود کنید و مدل (در صورت وجود) را تست کنید.","In demo you can upload image and test the model."))
+        f = st.file_uploader(t("آپلود تصویر برگ","Upload leaf image"), type=["jpg","jpeg","png"])
+        if f:
+            st.image(f, use_column_width=True)
+            preds = predict_probs(f)
+            idx = int(np.argmax(preds))
+            for i, cls in enumerate(class_labels):
+                pct = preds[i]*100
+                color = "#2d9f3f" if cls=="apple_healthy" else "#e53935"
+                st.markdown(f"<div style='margin-top:8px'><div style='background:#f1f5f9;border-radius:10px;padding:6px'><div style='background:{color};color:#fff;padding:6px;border-radius:6px;width:{int(pct)}%'>{pct:.1f}% {disease_info[cls]['name']}</div></div></div>", unsafe_allow_html=True)
+            info = disease_info[class_labels[idx]]
             st.success(f"{t('نتیجه','Result')}: {info['name']}")
-            st.info(f"{t('توضیح','Description')}: {info['desc']}")
-            st.warning(f"{t('درمان','Treatment')}: {info['treatment']}")
+            st.write(f"**{t('توضیح','Description')}:** {info['desc']}")
+            st.write(f"**{t('درمان','Treatment')}:** {info['treatment']}")
 else:
-    # ---------------- منو اصلی ----------------
-    menu = [t("🏠 خانه","🏠 Home"), t("🍎 تشخیص بیماری","🍎 Disease Detection"), t("🌱 ثبت و رصد","🌱 Tracking"),
-            t("📅 برنامه زمان‌بندی","📅 Schedule"), t("📈 پیش‌بینی رشد","📈 Growth Prediction"),
-            t("📥 دانلود گزارش","📥 Download Report"), t("🚪 خروج","Logout")]
-    choice = st.sidebar.selectbox(t("منو","Menu"), menu)
-    
-    if choice==t("🚪 خروج","Logout"):
-        st.session_state['logged_in'] = False
-        st.success(t("خروج انجام شد","Logged out successfully"))
+    # ---------- Main app ----------
+    menu = st.sidebar.selectbox(t("منو","Menu"),
+        [t("🏠 خانه","🏠 Home"), t("🍎 تشخیص بیماری","🍎 Disease"),
+         t("🌱 ثبت و رصد","🌱 Tracking"), t("📅 برنامه زمان‌بندی","📅 Schedule"),
+         t("📈 پیش‌بینی رشد","📈 Prediction"), t("📥 دانلود گزارش","📥 Download"),
+         t("🚪 خروج","Logout")])
+    if menu == t("🚪 خروج","Logout"):
+        st.session_state['user'] = None
+        st.experimental_rerun()
 
-    # ----------------🏠 خانه ----------------
-    if choice==t("🏠 خانه","🏠 Home"):
-        st.subheader(t("خانه","Home"))
-        st.markdown("<div class='kpi-card'><div class='card-title'>🌱 رشد نهال</div><div class='card-value'>اطلاعات ثبت شده و پیش‌بینی‌ها</div></div>", unsafe_allow_html=True)
-        st.markdown("<div class='kpi-card'><div class='card-title'>🍎 سلامت برگ‌ها</div><div class='card-value'>تشخیص بیماری و آمار سلامت</div></div>", unsafe_allow_html=True)
-    
-    # ----------------🍎 تشخیص بیماری ----------------
-    elif choice==t("🍎 تشخیص بیماری","🍎 Disease Detection"):
+    # ---------- HOME ----------
+    if menu == t("🏠 خانه","🏠 Home"):
+        st.header(t("داشبورد","Overview"))
+        df = st.session_state['tree_data']
+        last = df.sort_values('تاریخ').iloc[-1] if not df.empty else None
+        c1,c2,c3,c4 = st.columns([1,1,1,2])
+        with c1:
+            st.markdown(f"<div class='kpi-card'><b>{t('ارتفاع آخرین اندازه','Last height')}</b><div style='font-size:20px'>{(str(last['ارتفاع(cm)'])+' cm') if last is not None else '--'}</div></div>", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"<div class='kpi-card'><b>{t('تعداد برگ‌ها','Leaves')}</b><div style='font-size:20px'>{(int(last['تعداد برگ']) if last is not None else '--')}</div></div>", unsafe_allow_html=True)
+        with c3:
+            status = t('⚠️ نیاز به هرس','⚠️ Prune needed') if (last is not None and last['هشدار هرس']) else t('✅ سالم','✅ Healthy')
+            st.markdown(f"<div class='kpi-card'><b>{t('وضعیت هرس','Prune Status')}</b><div style='font-size:18px'>{status}</div></div>", unsafe_allow_html=True)
+        with c4:
+            st.markdown(f"<div class='section'><b>{t('نکته','Quick Tip')}</b><br>{t('برای نگهداری بهتر، هفته‌ای یکبار بررسی کنید.','Check seedlings weekly for best care.')}</div>", unsafe_allow_html=True)
+        if not df.empty:
+            fig = px.line(df.sort_values('تاریخ'), x='تاریخ', y=['ارتفاع(cm)','تعداد برگ'], labels={'value':t('مقدار','Value'),'variable':t('پارامتر','Parameter'),'تاریخ':t('تاریخ','Date')})
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ---------- DISEASE ----------
+    elif menu == t("🍎 تشخیص بیماری","🍎 Disease"):
         st.header(t("تشخیص بیماری برگ","Leaf Disease Detection"))
-        uploaded_file = st.file_uploader(t("📸 آپلود تصویر برگ سیب","Upload Leaf Image"), type=["jpg","jpeg","png"])
-        if uploaded_file:
-            st.image(uploaded_file, caption=t("تصویر آپلود شده","Uploaded Image"), use_column_width=True)
-            probs = predict_probs(uploaded_file)
-            label_idx = np.argmax(probs)
-            label = class_labels[label_idx]
-            st.write(t("احتمال هر بیماری (٪):","Probability (%)"))
-            for i, c in enumerate(class_labels):
-                st.write(f"{disease_info[c]['name']}: {probs[i]*100:.1f}%")
-            info = disease_info[label]
+        st.info(t("آپلود تصویر با کیفیت بهتر => نتیجه دقیق‌تر","Higher quality images => better results"))
+        f = st.file_uploader(t("آپلود تصویر","Upload image"), type=["jpg","jpeg","png"])
+        if f:
+            st.image(f, use_column_width=True)
+            preds = predict_probs(f)
+            idx = int(np.argmax(preds))
+            for i, cls in enumerate(class_labels):
+                pct = preds[i]*100
+                color = "#2d9f3f" if cls=="apple_healthy" else "#e53935"
+                st.markdown(f"<div style='margin-top:8px'><div style='background:#f1f5f9;border-radius:10px;padding:6px'><div style='background:{color};color:#fff;padding:6px;border-radius:6px;width:{int(pct)}%'>{pct:.1f}% {disease_info[cls]['name']}</div></div></div>", unsafe_allow_html=True)
+            info = disease_info[class_labels[idx]]
             st.success(f"{t('نتیجه','Result')}: {info['name']}")
-            st.info(f"{t('توضیح','Description')}: {info['desc']}")
-            st.warning(f"{t('درمان','Treatment')}: {info['treatment']}")
-    
-    # ----------------🌱 ثبت و رصد ----------------
-    elif choice==t("🌱 ثبت و رصد","🌱 Tracking"):
-        st.header(t("ثبت و رصد رشد نهال","Record Seedling Growth"))
-        if 'tree_data' not in st.session_state:
-            st.session_state['tree_data'] = pd.DataFrame(columns=['تاریخ','ارتفاع(cm)','تعداد برگ','توضیحات','هشدار هرس'])
-        with st.expander(t("➕ ثبت اندازه‌گیری رشد نهال","Add Measurement")):
+            st.write(f"**{t('توضیح','Description')}:** {info['desc']}")
+            st.write(f"**{t('درمان','Treatment')}:** {info['treatment']}")
+
+    # ---------- TRACKING ----------
+    elif menu == t("🌱 ثبت و رصد","🌱 Tracking"):
+        st.header(t("ثبت و رصد رشد نهال","Seedling Tracking"))
+        with st.expander(t("➕ ثبت اندازه‌گیری جدید","➕ Add measurement")):
             date = st.date_input(t("تاریخ","Date"), value=datetime.today())
-            height = st.number_input(t("ارتفاع نهال (cm)","Height (cm)"), min_value=0.0, step=0.5)
-            leaves = st.number_input(t("تعداد برگ‌ها","Number of Leaves"), min_value=0, step=1)
-            desc = st.text_area(t("توضیحات","Description"))
-            prune_warning = st.checkbox(t("هشدار هرس لازم است؟","Prune Needed?"))
-            if st.button(t("ثبت اندازه‌گیری","Submit Measurement")):
-                st.session_state['tree_data'] = pd.concat([
-                    st.session_state['tree_data'],
-                    pd.DataFrame([[date, height, leaves, desc, prune_warning]], columns=['تاریخ','ارتفاع(cm)','تعداد برگ','توضیحات','هشدار هرس'])
-                ], ignore_index=True)
-                st.success(t("✅ ثبت شد","✅ Submitted"))
+            height = st.number_input(t("ارتفاع (cm)","Height (cm)"), min_value=0.0, step=0.5)
+            leaves = st.number_input(t("تعداد برگ‌ها","Leaves"), min_value=0, step=1)
+            desc = st.text_area(t("توضیحات","Notes"))
+            prune = st.checkbox(t("نیاز به هرس؟","Prune needed?"))
+            if st.button(t("ثبت","Submit")):
+                st.session_state['tree_data'] = pd.concat([st.session_state['tree_data'],
+                    pd.DataFrame([[date, height, leaves, desc, prune]], columns=['تاریخ','ارتفاع(cm)','تعداد برگ','توضیحات','هشدار هرس'])], ignore_index=True)
+                st.success(t("ثبت شد ✅","Added ✅"))
         if not st.session_state['tree_data'].empty:
             df = st.session_state['tree_data'].sort_values('تاریخ')
-            st.write(t("روند ثبت شده رشد نهال:","Recorded Growth Data"))
             st.dataframe(df)
-            fig = px.line(df, x='تاریخ', y='ارتفاع(cm)', title=t("نمودار رشد ارتفاع","Height Growth"))
+            fig = px.line(df, x='تاریخ', y='ارتفاع(cm)', title=t("روند ارتفاع","Height trend"))
             st.plotly_chart(fig, use_container_width=True)
-    
-    # ----------------📅 برنامه زمان‌بندی ----------------
-    elif choice==t("📅 برنامه زمان‌بندی","📅 Schedule"):
-        st.header(t("برنامه زمان‌بندی یک ساله","One Year Schedule"))
-        if 'schedule' not in st.session_state:
-            start_date = datetime.today()
-            schedule_list = []
-            for week in range(52):
-                date = start_date + timedelta(weeks=week)
-                schedule_list.append([date.date(), "آبیاری", "آبیاری منظم نهال", False])
-                if week % 4 == 0:
-                    schedule_list.append([date.date(), "کوددهی", "تغذیه با کود متعادل", False])
-                if week % 12 == 0:
-                    schedule_list.append([date.date(), "هرس", "هرس شاخه‌های اضافه یا خشک", False])
-                if week % 6 == 0:
-                    schedule_list.append([date.date(), "بازرسی بیماری", "بررسی علائم بیماری و برگ‌ها", False])
-            st.session_state['schedule'] = pd.DataFrame(schedule_list, columns=['تاریخ','فعالیت','توضیحات','انجام شد'])
-        df_schedule = st.session_state['schedule']
+
+    # ---------- SCHEDULE ----------
+    elif menu == t("📅 برنامه زمان‌بندی","📅 Schedule"):
+        st.header(t("برنامه زمان‌بندی","Schedule"))
+        df_s = st.session_state['schedule']
         today = datetime.today().date()
-        st.subheader(t("⚠️ هشدار فعالیت‌های امروز","Today's Tasks"))
-        today_tasks = df_schedule[(df_schedule['تاریخ']==today) & (df_schedule['انجام شد']==False)]
+        today_tasks = df_s[(df_s['تاریخ']==today) & (df_s['انجام شد']==False)]
         if not today_tasks.empty:
-            for i, row in today_tasks.iterrows():
-                st.warning(f"{row['فعالیت']} - {row['توضیحات']}")
+            st.warning(t("فعالیت‌های امروز وجود دارد!","There are tasks for today!"))
+            for _, r in today_tasks.iterrows():
+                st.write(f"• {r['فعالیت']} — {r['توضیحات']}")
         else:
-            st.success(t("امروز همه فعالیت‌ها انجام شده ✅","All tasks done today ✅"))
-        for i in df_schedule.index:
-            df_schedule.at[i,'انجام شد'] = st.checkbox(f"{df_schedule.at[i,'تاریخ']} - {df_schedule.at[i,'فعالیت']}", value=df_schedule.at[i,'انجام شد'], key=i)
-        st.dataframe(df_schedule)
-    
-    # ----------------📈 پیش‌بینی رشد ----------------
-    elif choice==t("📈 پیش‌بینی رشد","📈 Growth Prediction"):
-        st.header(t("پیش‌بینی رشد نهال","Seedling Growth Prediction"))
-        if not st.session_state['tree_data'].empty:
+            st.success(t("امروز کاری برنامه‌ریزی نشده یا همه انجام شده","No pending tasks for today"))
+        for i in df_s.index:
+            df_s.at[i,'انجام شد'] = st.checkbox(f"{df_s.at[i,'تاریخ']} — {df_s.at[i,'فعالیت']}", value=df_s.at[i,'انجام شد'], key=f"sch{i}")
+        st.dataframe(df_s)
+
+    # ---------- PREDICTION ----------
+    elif menu == t("📈 پیش‌بینی رشد","📈 Prediction"):
+        st.header(t("پیش‌بینی رشد","Growth Prediction"))
+        if st.session_state['tree_data'].empty:
+            st.info(t("ابتدا اندازه‌گیری‌های رشد را ثبت کنید.","Add growth records first."))
+        else:
             df = st.session_state['tree_data'].sort_values('تاریخ')
             df['روز'] = (df['تاریخ'] - df['تاریخ'].min()).dt.days
             X = df['روز'].values
-            y_height = df['ارتفاع(cm)'].values
-            y_leaves = df['تعداد برگ'].values
-            def linear_fit(x, y):
-                if len(x) < 2:
-                    return lambda z: y[-1] if len(y)>0 else 0
-                a = (y[-1]-y[0])/(x[-1]-x[0])
-                b = y[0] - a*x[0]
-                return lambda z: a*z + b
-            pred_height_func = linear_fit(X, y_height)
-            pred_leaves_func = linear_fit(X, y_leaves)
-            future_days = np.array([(df['روز'].max() + 7*i) for i in range(1, 13)])
-            future_dates = [df['تاریخ'].max() + timedelta(weeks=i) for i in range(1, 13)]
-            pred_height = [pred_height_func(d) for d in future_days]
-            pred_leaves = [pred_leaves_func(d) for d in future_days]
-            df_future = pd.DataFrame({
-                'تاریخ': future_dates,
-                'ارتفاع پیش‌بینی شده(cm)': pred_height,
-                'تعداد برگ پیش‌بینی شده': pred_leaves
-            })
+            y = df['ارتفاع(cm)'].values
+            def linear_fit(x,y):
+                if len(x) < 2: return lambda z: y[-1] if len(y)>0 else 0
+                a = (y[-1]-y[0])/(x[-1]-x[0]); b = y[0] - a*x[0]; return lambda z: a*z + b
+            f_lin = linear_fit(X,y)
+            future_days = np.array([(df['روز'].max() + 7*i) for i in range(1,13)])
+            future_dates = [df['تاریخ'].max() + timedelta(weeks=i) for i in range(1,13)]
+            preds = [f_lin(d) for d in future_days]
+            df_future = pd.DataFrame({'تاریخ': future_dates, t('ارتفاع پیش‌بینی شده(cm)','Predicted Height (cm)'): preds})
             st.dataframe(df_future)
-            fig = px.line(df_future, x='تاریخ', y='ارتفاع پیش‌بینی شده(cm)', title=t("پیش‌بینی ارتفاع","Height Prediction"))
+            fig = px.line(df_future, x='تاریخ', y=df_future.columns[1], title=t("پیش‌بینی ارتفاع","Height forecast"))
             st.plotly_chart(fig, use_container_width=True)
-    
-    # ----------------📥 دانلود گزارش ----------------
-    elif choice==t("📥 دانلود گزارش","📥 Download Report"):
-        st.header(t("دانلود گزارش کامل","Download Full Report"))
-        if st.button(t("دانلود Excel داشبورد کامل","Download Full Dashboard Excel")):
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                if 'tree_data' in st.session_state and not st.session_state['tree_data'].empty:
-                    st.session_state['tree_data'].to_excel(writer, sheet_name="رشد نهال", index=False)
-                if 'schedule' in st.session_state and not st.session_state['schedule'].empty:
-                    st.session_state['schedule'].to_excel(writer, sheet_name="برنامه رشد", index=False)
-                if 'df_future' in locals() and not df_future.empty:
-                    df_future.to_excel(writer, sheet_name="پیش‌بینی رشد", index=False)
-                writer.save()
-                st.download_button(t("📥 دانلود فایل Excel","Download Excel File"), data=buffer, file_name="apple_dashboard_full.xlsx")
+            st.session_state['df_future'] = df_future
+
+    # ---------- DOWNLOAD ----------
+    elif menu == t("📥 دانلود گزارش","📥 Download"):
+        st.header(t("دانلود گزارش","Download"))
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            if not st.session_state['tree_data'].empty:
+                st.session_state['tree_data'].to_excel(writer, sheet_name='growth', index=False)
+            if not st.session_state['schedule'].empty:
+                st.session_state['schedule'].to_excel(writer, sheet_name='schedule', index=False)
+            if 'df_future' in st.session_state and not st.session_state['df_future'].empty:
+                st.session_state['df_future'].to_excel(writer, sheet_name='prediction', index=False)
+            writer.save()
+        data = buffer.getvalue()
+        st.download_button(label=t("دانلود Excel داشبورد","Download Excel Dashboard"), data=data, file_name="apple_dashboard_full.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
