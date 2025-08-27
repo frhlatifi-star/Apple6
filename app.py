@@ -1,4 +1,4 @@
-# app_seedling_pro_final_v8.py
+# app_seedling_pro_auto_alerts.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -10,24 +10,23 @@ import io
 import plotly.express as px
 import os
 
-# ---------- Config ----------
-st.set_page_config(page_title="🍎 Seedling Pro Dashboard", layout="wide")
+# ---------- تنظیمات صفحه ----------
+st.set_page_config(page_title="داشبورد نهال سیب 🍎", layout="wide")
 
-# ---------- Language Helper ----------
-lang = st.sidebar.selectbox("Language / زبان", ["English", "فارسی"])
-EN = (lang == "English")
-def t(fa, en): return en if EN else fa
+# ---------- تابع ترجمه ----------
+def t(fa, en):
+    lang = st.session_state.get('lang', 'FA')
+    return en if lang=='EN' else fa
 
-# ---------- Styles ----------
-st.markdown("""
-<style>
-.kpi-card{background:#ffffffdd;border-radius:14px;padding:14px;margin-bottom:16px;box-shadow:0 6px 20px rgba(0,0,0,0.15);}
-body{font-family: 'Vazir', sans-serif; direction: rtl;}
-</style>
-""", unsafe_allow_html=True)
+# ---------- انتخاب زبان ----------
+if 'lang' not in st.session_state: st.session_state['lang'] = 'FA'
+lang_choice = st.sidebar.selectbox("زبان / Language", ['فارسی','English'])
+st.session_state['lang'] = 'EN' if lang_choice=='English' else 'FA'
 
-# ---------- Session Initialization ----------
-if 'tree_data' not in st.session_state: st.session_state['tree_data'] = pd.DataFrame(columns=['date','height','leaves','notes','prune'])
+# ---------- آماده‌سازی داده‌ها ----------
+if 'tree_data' not in st.session_state:
+    st.session_state['tree_data'] = pd.DataFrame(columns=['تاریخ','ارتفاع(cm)','تعداد برگ','توضیحات','نیاز به هرس'])
+
 if 'schedule' not in st.session_state:
     start_date = datetime.today()
     schedule_list = []
@@ -40,18 +39,11 @@ if 'schedule' not in st.session_state:
             schedule_list.append([date.date(), t("هرس","Pruning"), False])
         if week % 6 == 0:
             schedule_list.append([date.date(), t("بازرسی بیماری","Disease Check"), False])
-    st.session_state['schedule'] = pd.DataFrame(schedule_list, columns=['date','task','task_done'])
+    st.session_state['schedule'] = pd.DataFrame(schedule_list, columns=['تاریخ','فعالیت','انجام شد'])
+
 if 'df_future' not in st.session_state: st.session_state['df_future'] = pd.DataFrame()
 
-# ---------- Disease Metadata ----------
-class_labels = ["apple_healthy", "apple_black_spot", "apple_powdery_mildew"]
-disease_info = {
-    "apple_black_spot": {"name": t("لکه سیاه ⚫️","Black Spot ⚫️"), "desc": t("لکه‌های سیاه روی برگ و میوه.","Black spots on leaves/fruit."), "treatment": t("قارچ‌کش، هرس و جمع‌آوری برگ‌ها","Fungicide, prune, remove fallen leaves")},
-    "apple_powdery_mildew": {"name": t("سفیدک پودری ❄️","Powdery Mildew ❄️"), "desc": t("سطح برگ سفید و پودری می‌شود.","White powdery surface on leaves."), "treatment": t("گوگرد، هرس و تهویه","Sulfur spray, pruning, ventilation")},
-    "apple_healthy": {"name": t("برگ سالم ✅","Healthy ✅"), "desc": t("برگ سالم است.","Leaf is healthy."), "treatment": t("ادامه مراقبت‌های معمول","Continue standard care")}
-}
-
-# ---------- Load Model ----------
+# ---------- مدل تشخیص بیماری ----------
 @st.cache_resource
 def load_model_cached(path="leaf_model.h5"):
     try:
@@ -60,19 +52,78 @@ def load_model_cached(path="leaf_model.h5"):
         return None
 model = load_model_cached()
 
-# ---------- Main App ----------
+class_labels = ["apple_healthy", "apple_black_spot", "apple_powdery_mildew"]
+disease_info = {
+    "apple_black_spot": {"name": t("لکه سیاه ⚫️","Black Spot ⚫️"), "desc": t("لکه‌های سیاه روی برگ و میوه.","Black spots on leaves/fruit."), "treatment": t("قارچ‌کش، هرس و جمع‌آوری برگ‌ها","Fungicide, prune, remove fallen leaves")},
+    "apple_powdery_mildew": {"name": t("سفیدک پودری ❄️","Powdery Mildew ❄️"), "desc": t("سطح برگ سفید و پودری می‌شود.","White powdery surface on leaves."), "treatment": t("گوگرد، هرس و تهویه","Sulfur spray, pruning, ventilation")},
+    "apple_healthy": {"name": t("برگ سالم ✅","Healthy ✅"), "desc": t("برگ سالم است.","Leaf is healthy."), "treatment": t("ادامه مراقبت‌های معمول","Continue standard care")}
+}
+
+# ---------- منو ----------
 menu = st.sidebar.selectbox(t("منو","Menu"), [t("🏠 خانه","Home"), t("🍎 تشخیص بیماری","Disease"), t("🌱 ثبت و رصد","Tracking"), t("📅 برنامه زمان‌بندی","Schedule"), t("📈 پیش‌بینی رشد","Prediction"), t("📥 دانلود گزارش","Download")])
 
-# ---------- Home ----------
+# ---------- داشبورد خانه ----------
 if menu == t("🏠 خانه","Home"):
-    st.header(t("داشبورد نهال","Seedling Dashboard"))
+    st.header(t("داشبورد عملیاتی نهال","Operational Seedling Dashboard"))
     df = st.session_state['tree_data']
+    alerts = []
     if not df.empty:
-        last = df.sort_values('date').iloc[-1]
-        st.markdown(f"ارتفاع آخرین اندازه: {last['height']} cm")
-        st.markdown(f"تعداد برگ‌ها: {last['leaves']}")
+        last = df.sort_values('تاریخ').iloc[-1]
+        # هشدار هرس
+        if last['نیاز به هرس']:
+            alerts.append(t("هشدار: نیاز به هرس وجود دارد","Pruning Needed"))
+        # هشدار رشد کم
+        if last['ارتفاع(cm)'] < 20:
+            alerts.append(t("هشدار: ارتفاع نهال کمتر از حد معمول است","Height Below Normal"))
+        # هشدار تعداد برگ کم
+        if last['تعداد برگ'] < 10:
+            alerts.append(t("هشدار: تعداد برگ کم است","Leaves Low"))
+    if alerts:
+        st.warning("\n".join(alerts))
 
-# ---------- Disease ----------
+# ---------- ثبت و رصد ----------
+elif menu == t("🌱 ثبت و رصد","Tracking"):
+    st.header(t("ثبت و رصد رشد نهال","Seedling Tracking"))
+    with st.expander(t("➕ ثبت اندازه‌گیری جدید","Add Measurement")):
+        date = st.date_input(t("تاریخ","Date"), value=datetime.today())
+        height = st.number_input(t("ارتفاع (cm)","Height (cm)"), min_value=0.0, step=0.5)
+        leaves = st.number_input(t("تعداد برگ‌ها","Leaves"), min_value=0, step=1)
+        notes = st.text_area(t("توضیحات","Notes"))
+        prune = st.checkbox(t("نیاز به هرس؟","Prune needed?"))
+        if st.button(t("ثبت","Submit")):
+            st.session_state['tree_data'] = pd.concat([st.session_state['tree_data'], pd.DataFrame([[date, height, leaves, notes, prune]], columns=['تاریخ','ارتفاع(cm)','تعداد برگ','توضیحات','نیاز به هرس'])], ignore_index=True)
+            st.success(t("ثبت شد ✅","Added ✅"))
+    if not st.session_state['tree_data'].empty:
+        st.dataframe(st.session_state['tree_data'])
+
+# ---------- برنامه زمان‌بندی ----------
+elif menu == t("📅 برنامه زمان‌بندی","Schedule"):
+    st.header(t("برنامه زمان‌بندی","Schedule"))
+    df_s = st.session_state['schedule']
+    for i in df_s.index:
+        df_s.at[i,'انجام شد'] = st.checkbox(f"{df_s.at[i,'تاریخ']} — {df_s.at[i,'فعالیت']}", value=df_s.at[i,'انجام شد'], key=f"sch{i}")
+    st.dataframe(df_s)
+
+# ---------- پیش‌بینی رشد ----------
+elif menu == t("📈 پیش‌بینی رشد","Prediction"):
+    st.header(t("پیش‌بینی رشد","Growth Prediction"))
+    df = st.session_state['tree_data']
+    if df.empty:
+        st.info(t("ابتدا اندازه‌گیری‌های رشد را ثبت کنید.","Add growth records first."))
+    else:
+        df_sorted = df.sort_values('تاریخ')
+        X = (df_sorted['تاریخ'] - df_sorted['تاریخ'].min()).dt.days.values
+        y = df_sorted['ارتفاع(cm)'].values
+        if len(X) >= 2:
+            a = (y[-1]-y[0])/(X[-1]-X[0]); b = y[0]-a*X[0]
+            future_days = np.array([(X.max()+7*i) for i in range(1,13)])
+            preds = a*future_days + b
+            future_dates = [df_sorted['تاریخ'].max() + timedelta(weeks=i) for i in range(1,13)]
+            df_future = pd.DataFrame({'تاریخ': future_dates, t('ارتفاع پیش‌بینی شده(cm)','Predicted Height (cm)'): preds})
+            st.session_state['df_future'] = df_future
+            st.dataframe(df_future)
+
+# ---------- تشخیص بیماری ----------
 elif menu == t("🍎 تشخیص بیماری","Disease"):
     st.header(t("تشخیص بیماری برگ","Leaf Disease Detection"))
     f = st.file_uploader(t("آپلود تصویر","Upload leaf image"), type=["jpg","jpeg","png"])
@@ -92,49 +143,7 @@ elif menu == t("🍎 تشخیص بیماری","Disease"):
         st.write(f"**{t('توضیح','Description')}:** {disease_info[class_labels[idx]]['desc']}")
         st.write(f"**{t('درمان / راهنمایی','Treatment / Guidance')}:** {disease_info[class_labels[idx]]['treatment']}")
 
-# ---------- Tracking ----------
-elif menu == t("🌱 ثبت و رصد","Tracking"):
-    st.header(t("ثبت و رصد رشد نهال","Seedling Tracking"))
-    with st.expander(t("➕ ثبت اندازه‌گیری جدید","Add new measurement")):
-        date = st.date_input(t("تاریخ","Date"), value=datetime.today())
-        height = st.number_input(t("ارتفاع (cm)","Height (cm)"), min_value=0.0, step=0.5)
-        leaves = st.number_input(t("تعداد برگ‌ها","Leaves"), min_value=0, step=1)
-        notes = st.text_area(t("توضیحات","Notes"))
-        prune = st.checkbox(t("نیاز به هرس؟","Prune needed?"))
-        if st.button(t("ثبت","Submit")):
-            st.session_state['tree_data'] = pd.concat([st.session_state['tree_data'],
-                pd.DataFrame([[date, height, leaves, notes, prune]], columns=['date','height','leaves','notes','prune'])], ignore_index=True)
-            st.success(t("ثبت شد ✅","Added ✅"))
-    st.dataframe(st.session_state['tree_data'])
-
-# ---------- Schedule ----------
-elif menu == t("📅 برنامه زمان‌بندی","Schedule"):
-    st.header(t("برنامه زمان‌بندی","Schedule"))
-    df_s = st.session_state['schedule']
-    for i in df_s.index:
-        df_s.at[i,'task_done'] = st.checkbox(f"{df_s.at[i,'date']} — {df_s.at[i,'task']}", value=df_s.at[i,'task_done'], key=f"sch{i}")
-    st.dataframe(df_s)
-
-# ---------- Prediction ----------
-elif menu == t("📈 پیش‌بینی رشد","Prediction"):
-    st.header(t("پیش‌بینی رشد","Growth Prediction"))
-    df = st.session_state['tree_data']
-    if df.empty:
-        st.info(t("ابتدا اندازه‌گیری‌های رشد را ثبت کنید.","Add growth records first."))
-    else:
-        df_sorted = df.sort_values('date')
-        X = (df_sorted['date'] - df_sorted['date'].min()).dt.days.values
-        y = df_sorted['height'].values
-        if len(X) >= 2:
-            a = (y[-1]-y[0])/(X[-1]-X[0]); b = y[0]-a*X[0]
-            future_days = np.array([(X.max()+7*i) for i in range(1,13)])
-            preds = a*future_days + b
-            future_dates = [df_sorted['date'].max() + timedelta(weeks=i) for i in range(1,13)]
-            df_future = pd.DataFrame({'date': future_dates, t('ارتفاع پیش‌بینی شده(cm)','Predicted Height (cm)'): preds})
-            st.session_state['df_future'] = df_future
-            st.dataframe(df_future)
-
-# ---------- Download ----------
+# ---------- دانلود گزارش ----------
 elif menu == t("📥 دانلود گزارش","Download"):
     st.header(t("دانلود گزارش","Download"))
     buffer = io.BytesIO()
