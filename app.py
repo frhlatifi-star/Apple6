@@ -1,4 +1,4 @@
-# app_seedling_pro_final_v4.py
+# app_seedling_pro_final_v5.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -14,7 +14,7 @@ import plotly.express as px
 import os
 
 # ---------- Config ----------
-st.set_page_config(page_title="🍎 Seedling Pro Full Dashboard", layout="wide")
+st.set_page_config(page_title="🍎 Seedling Pro Dashboard", layout="wide")
 
 # ---------- Language Helper ----------
 lang = st.sidebar.selectbox("Language / زبان", ["English", "فارسی"])
@@ -34,10 +34,9 @@ body{font-family: 'Vazir', sans-serif; direction: rtl;}
 # ---------- Database ----------
 DB_DIR = os.path.join(os.getcwd(), "data")
 os.makedirs(DB_DIR, exist_ok=True)
-DB_FILE = os.path.join(DB_DIR, "users_seedling_v4.db")
+DB_FILE = os.path.join(DB_DIR, "users_seedling_v5.db")
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
-
 users_table = Table('users', meta,
                     Column('id', Integer, primary_key=True),
                     Column('username', String, unique=True, nullable=False),
@@ -45,11 +44,10 @@ users_table = Table('users', meta,
                     Column('role', String, default='user'))
 meta.create_all(engine)
 
-# ---------- Session ----------
+# ---------- Session Initialization ----------
 if 'user' not in st.session_state: st.session_state['user'] = None
-if 'role' not in st.session_state: st.session_state['role'] = None
 if 'tree_data' not in st.session_state: st.session_state['tree_data'] = pd.DataFrame(columns=['date','height','leaves','notes','prune'])
-if 'schedule' not in st.session_state: 
+if 'schedule' not in st.session_state:
     start_date = datetime.today()
     schedule_list = []
     for week in range(52):
@@ -97,24 +95,23 @@ def login(username, password):
                 return role
         return None
 
-# ---------- Mode Selection ----------
+# ---------- Demo Mode ----------
 mode = st.sidebar.radio(t("حالت","Mode"), [t("ورود","Login"), t("ثبت نام","Sign Up"), t("دمو","Demo")])
 
-# ---------- Demo Mode ----------
 if mode == t("دمو","Demo"):
     st.header(t("دمو","Demo"))
     st.info(t("در حالت دمو بدون ثبت نام می‌توانید تصویر آپلود کنید و مدل را تست کنید.","In demo mode you can upload image and test model without login."))
     f = st.file_uploader(t("آپلود تصویر برگ","Upload leaf image"), type=["jpg","jpeg","png"])
     if f:
         st.image(f, use_container_width=True)
-        if model is not None:
+        if model:
             img = Image.open(f).convert("RGB")
             img = img.resize(model.input_shape[1:3])
             arr = img_to_array(img)/255.0
             arr = np.expand_dims(arr, axis=0)
             preds = model.predict(arr)[0]
         else:
-            preds = np.array([1.0, 0.0, 0.0])
+            preds = np.array([1.0,0.0,0.0])
         idx = int(np.argmax(preds))
         st.write(f"**{t('نتیجه','Result')}:** {disease_info[class_labels[idx]]['name']}")
         st.write(f"**{t('شدت بیماری (%)','Severity (%)')}:** {preds[idx]*100:.1f}%")
@@ -122,22 +119,21 @@ if mode == t("دمو","Demo"):
         st.write(f"**{t('درمان / راهنمایی','Treatment / Guidance')}:** {disease_info[class_labels[idx]]['treatment']}")
 
 # ---------- Auth UI ----------
-if mode != t("دمو","Demo"):
+if mode != t("دمو","Demo") and st.session_state['user'] is None:
+    st.subheader(t("ورود / ثبت نام","Login / Sign Up"))
     username = st.text_input(t("نام کاربری","Username"))
     password = st.text_input(t("رمز عبور","Password"), type="password")
     if mode == t("ثبت نام","Sign Up") and st.button(t("ثبت نام","Register")):
         if username and password:
             register(username, password)
             st.success(t("ثبت نام انجام شد. اکنون وارد شوید.","Registered successfully. Please login."))
-        else:
-            st.error(t("نام کاربری و رمز را وارد کنید.","Provide username & password."))
-
     if mode == t("ورود","Login") and st.button(t("ورود","Login")):
         role = login(username, password)
         if role:
             st.session_state['user'] = username
             st.session_state['role'] = role
             st.success(t("ورود موفق ✅","Login successful ✅"))
+            st.experimental_rerun()
 
 # ---------- Dashboard for Logged-in Users ----------
 if st.session_state['user'] and mode != t("دمو","Demo"):
