@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 import io
+import plotly.express as px
 
 # ---------------- صفحه و CSS ----------------
 st.set_page_config(
@@ -115,5 +116,123 @@ else:
         st.session_state['logged_in'] = False
         st.success(t("خروج انجام شد","Logged out successfully"))
 
-    # ---------------- بخش‌های اصلی ----------------
-    # ✅ می‌توانید بخش‌های خانه، تشخیص بیماری، ثبت و رصد، زمان‌بندی، پیش‌بینی، دانلود گزارش را با همان استایل کارت‌ها ادامه دهید
+    # ----------------🏠 خانه ----------------
+    if choice==t("🏠 خانه","🏠 Home"):
+        st.subheader(t("خانه","Home"))
+        st.markdown("<div class='kpi-card'><div class='card-title'>🌱 رشد نهال</div><div class='card-value'>اطلاعات ثبت شده و پیش‌بینی‌ها</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='kpi-card'><div class='card-title'>🍎 سلامت برگ‌ها</div><div class='card-value'>تشخیص بیماری و آمار سلامت</div></div>", unsafe_allow_html=True)
+    
+    # ----------------🍎 تشخیص بیماری ----------------
+    elif choice==t("🍎 تشخیص بیماری","🍎 Disease Detection"):
+        st.header(t("تشخیص بیماری برگ","Leaf Disease Detection"))
+        uploaded_file = st.file_uploader(t("📸 آپلود تصویر برگ سیب","Upload Leaf Image"), type=["jpg","jpeg","png"])
+        if uploaded_file:
+            st.image(uploaded_file, caption=t("تصویر آپلود شده","Uploaded Image"), use_column_width=True)
+            probs = predict_probs(uploaded_file)
+            label_idx = np.argmax(probs)
+            label = class_labels[label_idx]
+            st.write(t("احتمال هر بیماری (٪):","Probability (%)"))
+            for i, c in enumerate(class_labels):
+                st.write(f"{disease_info[c]['name']}: {probs[i]*100:.1f}%")
+            info = disease_info[label]
+            st.success(f"{t('نتیجه','Result')}: {info['name']}")
+            st.info(f"{t('توضیح','Description')}: {info['desc']}")
+            st.warning(f"{t('درمان','Treatment')}: {info['treatment']}")
+    
+    # ----------------🌱 ثبت و رصد ----------------
+    elif choice==t("🌱 ثبت و رصد","🌱 Tracking"):
+        st.header(t("ثبت و رصد رشد نهال","Record Seedling Growth"))
+        if 'tree_data' not in st.session_state:
+            st.session_state['tree_data'] = pd.DataFrame(columns=['تاریخ','ارتفاع(cm)','تعداد برگ','توضیحات','هشدار هرس'])
+        with st.expander(t("➕ ثبت اندازه‌گیری رشد نهال","Add Measurement")):
+            date = st.date_input(t("تاریخ","Date"), value=datetime.today())
+            height = st.number_input(t("ارتفاع نهال (cm)","Height (cm)"), min_value=0.0, step=0.5)
+            leaves = st.number_input(t("تعداد برگ‌ها","Number of Leaves"), min_value=0, step=1)
+            desc = st.text_area(t("توضیحات","Description"))
+            prune_warning = st.checkbox(t("هشدار هرس لازم است؟","Prune Needed?"))
+            if st.button(t("ثبت اندازه‌گیری","Submit Measurement")):
+                st.session_state['tree_data'] = pd.concat([
+                    st.session_state['tree_data'],
+                    pd.DataFrame([[date, height, leaves, desc, prune_warning]], columns=['تاریخ','ارتفاع(cm)','تعداد برگ','توضیحات','هشدار هرس'])
+                ], ignore_index=True)
+                st.success(t("✅ ثبت شد","✅ Submitted"))
+        if not st.session_state['tree_data'].empty:
+            df = st.session_state['tree_data'].sort_values('تاریخ')
+            st.write(t("روند ثبت شده رشد نهال:","Recorded Growth Data"))
+            st.dataframe(df)
+            fig = px.line(df, x='تاریخ', y='ارتفاع(cm)', title=t("نمودار رشد ارتفاع","Height Growth"))
+            st.plotly_chart(fig, use_container_width=True)
+    
+    # ----------------📅 برنامه زمان‌بندی ----------------
+    elif choice==t("📅 برنامه زمان‌بندی","📅 Schedule"):
+        st.header(t("برنامه زمان‌بندی یک ساله","One Year Schedule"))
+        if 'schedule' not in st.session_state:
+            start_date = datetime.today()
+            schedule_list = []
+            for week in range(52):
+                date = start_date + timedelta(weeks=week)
+                schedule_list.append([date.date(), "آبیاری", "آبیاری منظم نهال", False])
+                if week % 4 == 0:
+                    schedule_list.append([date.date(), "کوددهی", "تغذیه با کود متعادل", False])
+                if week % 12 == 0:
+                    schedule_list.append([date.date(), "هرس", "هرس شاخه‌های اضافه یا خشک", False])
+                if week % 6 == 0:
+                    schedule_list.append([date.date(), "بازرسی بیماری", "بررسی علائم بیماری و برگ‌ها", False])
+            st.session_state['schedule'] = pd.DataFrame(schedule_list, columns=['تاریخ','فعالیت','توضیحات','انجام شد'])
+        df_schedule = st.session_state['schedule']
+        today = datetime.today().date()
+        st.subheader(t("⚠️ هشدار فعالیت‌های امروز","Today's Tasks"))
+        today_tasks = df_schedule[(df_schedule['تاریخ']==today) & (df_schedule['انجام شد']==False)]
+        if not today_tasks.empty:
+            for i, row in today_tasks.iterrows():
+                st.warning(f"{row['فعالیت']} - {row['توضیحات']}")
+        else:
+            st.success(t("امروز همه فعالیت‌ها انجام شده ✅","All tasks done today ✅"))
+        for i in df_schedule.index:
+            df_schedule.at[i,'انجام شد'] = st.checkbox(f"{df_schedule.at[i,'تاریخ']} - {df_schedule.at[i,'فعالیت']}", value=df_schedule.at[i,'انجام شد'], key=i)
+        st.dataframe(df_schedule)
+    
+    # ----------------📈 پیش‌بینی رشد ----------------
+    elif choice==t("📈 پیش‌بینی رشد","📈 Growth Prediction"):
+        st.header(t("پیش‌بینی رشد نهال","Seedling Growth Prediction"))
+        if not st.session_state['tree_data'].empty:
+            df = st.session_state['tree_data'].sort_values('تاریخ')
+            df['روز'] = (df['تاریخ'] - df['تاریخ'].min()).dt.days
+            X = df['روز'].values
+            y_height = df['ارتفاع(cm)'].values
+            y_leaves = df['تعداد برگ'].values
+            def linear_fit(x, y):
+                if len(x) < 2:
+                    return lambda z: y[-1] if len(y)>0 else 0
+                a = (y[-1]-y[0])/(x[-1]-x[0])
+                b = y[0] - a*x[0]
+                return lambda z: a*z + b
+            pred_height_func = linear_fit(X, y_height)
+            pred_leaves_func = linear_fit(X, y_leaves)
+            future_days = np.array([(df['روز'].max() + 7*i) for i in range(1, 13)])
+            future_dates = [df['تاریخ'].max() + timedelta(weeks=i) for i in range(1, 13)]
+            pred_height = [pred_height_func(d) for d in future_days]
+            pred_leaves = [pred_leaves_func(d) for d in future_days]
+            df_future = pd.DataFrame({
+                'تاریخ': future_dates,
+                'ارتفاع پیش‌بینی شده(cm)': pred_height,
+                'تعداد برگ پیش‌بینی شده': pred_leaves
+            })
+            st.dataframe(df_future)
+            fig = px.line(df_future, x='تاریخ', y='ارتفاع پیش‌بینی شده(cm)', title=t("پیش‌بینی ارتفاع","Height Prediction"))
+            st.plotly_chart(fig, use_container_width=True)
+    
+    # ----------------📥 دانلود گزارش ----------------
+    elif choice==t("📥 دانلود گزارش","📥 Download Report"):
+        st.header(t("دانلود گزارش کامل","Download Full Report"))
+        if st.button(t("دانلود Excel داشبورد کامل","Download Full Dashboard Excel")):
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                if 'tree_data' in st.session_state and not st.session_state['tree_data'].empty:
+                    st.session_state['tree_data'].to_excel(writer, sheet_name="رشد نهال", index=False)
+                if 'schedule' in st.session_state and not st.session_state['schedule'].empty:
+                    st.session_state['schedule'].to_excel(writer, sheet_name="برنامه رشد", index=False)
+                if 'df_future' in locals() and not df_future.empty:
+                    df_future.to_excel(writer, sheet_name="پیش‌بینی رشد", index=False)
+                writer.save()
+                st.download_button(t("📥 دانلود فایل Excel","Download Excel File"), data=buffer, file_name="apple_dashboard_full.xlsx")
