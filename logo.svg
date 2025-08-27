@@ -6,7 +6,7 @@
       <stop offset="1" stop-color="#ff6a45"/>
     </linearGradient>
   </defs>
-  <rect rx="12" width="240" height="64" fill="#ffffff" opacity="0.0"/>
+  <rect rx="12" width="340" height="64" fill="#ffffff" opacity="0.0"/>
   <!-- apple shape -->
   <g transform="translate(8,4)">
     <path d="M28 6c-4-2-9 0-11 3s-2 7 1 10 6 5 11 4 8-5 9-9-3-7-10-8z" fill="url(#g)"/>
