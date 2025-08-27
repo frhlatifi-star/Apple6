@@ -1,4 +1,4 @@
-# app_seedling_pro_final_safe.py
+# app_seedling_pro_final_demo.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -37,7 +37,7 @@ body{font-family: 'Vazir', sans-serif; direction: rtl;}
 # ---------- Database (Persistent) ----------
 DB_DIR = os.path.join(os.getcwd(), "data")
 os.makedirs(DB_DIR, exist_ok=True)
-DB_FILE = os.path.join(DB_DIR, "users_seedling_final_safe.db")
+DB_FILE = os.path.join(DB_DIR, "users_seedling_final_demo.db")
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
 
@@ -126,7 +126,16 @@ if mode == t("ورود","Login") and st.button(t("ورود","Login")):
         load_user_data(username)
         st.success(t("ورود موفق ✅","Login successful ✅"))
 
-# ---------- Dashboard ----------
-if st.session_state['user']:
+# ---------- Demo Mode ----------
+if mode == t("دمو","Demo"):
+    st.header(t("دمو","Demo"))
+    st.info(t("در حالت دمو بدون ثبت نام می‌توانید تصویر آپلود کنید و مدل (در صورت وجود) را تست کنید.","In demo mode you can upload image and test model without login."))
+    f = st.file_uploader(t("آپلود تصویر برگ","Upload leaf image"), type=["jpg","jpeg","png"])
+    if f:
+        st.image(f, use_column_width=True)
+        st.write(t("پیش‌بینی بیماری (Demo)","Disease prediction (Demo)"))
+
+# ---------- Dashboard for Logged-in Users ----------
+if st.session_state['user'] and mode != t("دمو","Demo"):
     st.write(f"{t('خوش آمدید','Welcome')}, {st.session_state['user']}!")
-    # اینجا می‌توانید تمام بخش‌های Home, Tracking, Schedule, Prediction, Download, Logout را اضافه کنید
+    # اینجا تمام بخش‌های Home, Tracking, Schedule, Prediction, Download و Logout اضافه شوند
