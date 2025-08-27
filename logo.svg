@@ -16,7 +16,7 @@
 
   <!-- text -->
   <g transform="translate(72,14)">
-    <text x="70" y="18" font-family="Vazir, Arial, sans-serif" font-size="30" font-weight="700" fill="#052235">Seedling Pro</text>
-    <text x="70" y="36" font-family="Vazir, Arial, sans-serif" font-size="22" fill="#334155">داشبورد نهال سیب</text>
+    <text x="90" y="18" font-family="Vazir, Arial, sans-serif" font-size="25" font-weight="700" fill="#052235">Seedling Pro</text>
+    <text x="90" y="36" font-family="Vazir, Arial, sans-serif" font-size="17" fill="#334155">داشبورد نهال سیب</text>
   </g>
 </svg>
