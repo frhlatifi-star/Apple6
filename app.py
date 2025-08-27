@@ -1,4 +1,4 @@
-# app_seedling_pro_final_full_v3.py
+# app_seedling_pro_final_v4.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -24,20 +24,17 @@ def t(fa, en): return en if EN else fa
 # ---------- Styles ----------
 st.markdown("""
 <style>
-.kpi-card{background:#ffffffdd;border-radius:14px;padding:14px;margin-bottom:16px;box-shadow:0 6px 20px rgba(0,0,0,0.15);transition:transform 0.2s;}
-.kpi-card:hover{transform:scale(1.03);}
+.kpi-card{background:#ffffffdd;border-radius:14px;padding:14px;margin-bottom:16px;box-shadow:0 6px 20px rgba(0,0,0,0.15);}
 .kpi-title{font-size:16px;font-weight:bold;color:#333;}
 .kpi-value{font-size:28px;font-weight:bold;color:#2d9f3f;}
-.task-done{background:#d1ffd1;}
-.task-pending{background:#ffe6e6;}
 body{font-family: 'Vazir', sans-serif; direction: rtl;}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- Database (Persistent) ----------
+# ---------- Database ----------
 DB_DIR = os.path.join(os.getcwd(), "data")
 os.makedirs(DB_DIR, exist_ok=True)
-DB_FILE = os.path.join(DB_DIR, "users_seedling_full_v3.db")
+DB_FILE = os.path.join(DB_DIR, "users_seedling_v4.db")
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
 
@@ -100,29 +97,13 @@ def login(username, password):
                 return role
         return None
 
-# ---------- Auth UI ----------
+# ---------- Mode Selection ----------
 mode = st.sidebar.radio(t("حالت","Mode"), [t("ورود","Login"), t("ثبت نام","Sign Up"), t("دمو","Demo")])
-username = st.text_input(t("نام کاربری","Username"))
-password = st.text_input(t("رمز عبور","Password"), type="password")
-
-if mode == t("ثبت نام","Sign Up") and st.button(t("ثبت نام","Register")):
-    if username and password:
-        register(username, password)
-        st.success(t("ثبت نام انجام شد. اکنون وارد شوید.","Registered successfully. Please login."))
-    else:
-        st.error(t("نام کاربری و رمز را وارد کنید.","Provide username & password."))
-
-if mode == t("ورود","Login") and st.button(t("ورود","Login")):
-    role = login(username, password)
-    if role:
-        st.session_state['user'] = username
-        st.session_state['role'] = role
-        st.success(t("ورود موفق ✅","Login successful ✅"))
 
 # ---------- Demo Mode ----------
 if mode == t("دمو","Demo"):
     st.header(t("دمو","Demo"))
-    st.info(t("در حالت دمو بدون ثبت نام می‌توانید تصویر آپلود کنید و مدل (در صورت وجود) را تست کنید.","In demo mode you can upload image and test model without login."))
+    st.info(t("در حالت دمو بدون ثبت نام می‌توانید تصویر آپلود کنید و مدل را تست کنید.","In demo mode you can upload image and test model without login."))
     f = st.file_uploader(t("آپلود تصویر برگ","Upload leaf image"), type=["jpg","jpeg","png"])
     if f:
         st.image(f, use_container_width=True)
@@ -140,6 +121,24 @@ if mode == t("دمو","Demo"):
         st.write(f"**{t('توضیح','Description')}:** {disease_info[class_labels[idx]]['desc']}")
         st.write(f"**{t('درمان / راهنمایی','Treatment / Guidance')}:** {disease_info[class_labels[idx]]['treatment']}")
 
+# ---------- Auth UI ----------
+if mode != t("دمو","Demo"):
+    username = st.text_input(t("نام کاربری","Username"))
+    password = st.text_input(t("رمز عبور","Password"), type="password")
+    if mode == t("ثبت نام","Sign Up") and st.button(t("ثبت نام","Register")):
+        if username and password:
+            register(username, password)
+            st.success(t("ثبت نام انجام شد. اکنون وارد شوید.","Registered successfully. Please login."))
+        else:
+            st.error(t("نام کاربری و رمز را وارد کنید.","Provide username & password."))
+
+    if mode == t("ورود","Login") and st.button(t("ورود","Login")):
+        role = login(username, password)
+        if role:
+            st.session_state['user'] = username
+            st.session_state['role'] = role
+            st.success(t("ورود موفق ✅","Login successful ✅"))
+
 # ---------- Dashboard for Logged-in Users ----------
 if st.session_state['user'] and mode != t("دمو","Demo"):
     st.write(f"{t('خوش آمدید','Welcome')}, {st.session_state['user']}!")
@@ -148,14 +147,3 @@ if st.session_state['user'] and mode != t("دمو","Demo"):
     if menu == t("🚪 خروج","Logout"):
         st.session_state['user'] = None
         st.experimental_rerun()
-
-    # ---------- HOME ----------
-    if menu == t("🏠 خانه","Home"):
-        st.header(t("داشبورد","Overview"))
-        df = st.session_state['tree_data']
-        last = df.sort_values('date').iloc[-1] if not df.empty else None
-        c1,c2,c3,c4 = st.columns([1,1,1,2])
-        with c1: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>{t('ارتفاع آخرین اندازه','Last height')}</div><div class='kpi-value'>{(str(last['height'])+' cm') if last is not None else '--'}</div></div>", unsafe_allow_html=True)
-        with c2: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>{t('تعداد برگ‌ها','Leaves')}</div><div class='kpi-value'>{(int(last['leaves']) if last is not None else '--')}</div></div>", unsafe_allow_html=True)
-        with c3: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>{t('وضعیت هرس','Prune Status')}</div><div class='kpi-value'>{t('⚠️ نیاز به هرس','⚠️ Prune needed') if (last is not None and last['prune']) else t('✅ سالم','✅ Healthy')}</div></div>", unsafe_allow_html=True)
-        with c4: st.markdown(f"<div class='kpi-card'><div class='kpi-title'>{t('نکته','Quick Tip')}</div>{t('برای نگهداری بهتر، هفته‌ای یکبار بررسی کنید.','Check seedlings weekly for best care.')}</div>", unsafe_allow_html=True)
