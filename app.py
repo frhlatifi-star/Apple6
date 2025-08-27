@@ -1,4 +1,4 @@
-# app_seedling_pro_full_bilingual.py
+# app_seedling_pro_full_complete_final.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -13,7 +13,7 @@ import io
 import plotly.express as px
 
 # ---------- Config ----------
-st.set_page_config(page_title="🍎 Seedling Pro Bilingual", layout="wide")
+st.set_page_config(page_title="🍎 Seedling Pro Full", layout="wide")
 
 # ---------- Language Helper ----------
 lang = st.sidebar.selectbox("Language / زبان", ["English", "فارسی"])
@@ -34,7 +34,7 @@ body{font-family: 'Vazir', sans-serif; direction: rtl;}
 """, unsafe_allow_html=True)
 
 # ---------- Database ----------
-DB_FILE = "users_seedling_full_bilingual.db"
+DB_FILE = "users_seedling_full_complete_final.db"
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
 
@@ -84,6 +84,8 @@ def predict_probs(file):
 # ---------- Session ----------
 if 'user' not in st.session_state: st.session_state['user'] = None
 if 'role' not in st.session_state: st.session_state['role'] = None
+if 'tree_data' not in st.session_state: st.session_state['tree_data'] = pd.DataFrame(columns=['date','height','leaves','notes','prune'])
+if 'schedule' not in st.session_state: st.session_state['schedule'] = pd.DataFrame(columns=['date','task','task_done'])
 if 'df_future' not in st.session_state: st.session_state['df_future'] = pd.DataFrame()
 
 # ---------- Auth Functions ----------
@@ -91,14 +93,6 @@ def register(username, password, role='user'):
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     with engine.begin() as conn:
         conn.execute(users_table.insert().values(username=username, password_hash=hashed, role=role))
-        start_date = datetime.today()
-        schedule=[]
-        for week in range(52):
-            date = start_date + timedelta(weeks=week)
-            schedule.append({'username':username,'date':str(date.date()),'height':None,'leaves':None,'notes':None,'prune':None,'task':t('آبیاری','Watering'),'task_done':'False'})
-            if week % 4 == 0: schedule.append({'username':username,'date':str(date.date()),'height':None,'leaves':None,'notes':None,'prune':None,'task':t('کوددهی','Fertilization'),'task_done':'False'})
-            if week % 12 == 0: schedule.append({'username':username,'date':str(date.date()),'height':None,'leaves':None,'notes':None,'prune':None,'task':t('هرس','Pruning'),'task_done':'False'})
-        for item in schedule: conn.execute(data_table.insert().values(**item))
 
 def login(username, password):
     with engine.begin() as conn:
@@ -110,13 +104,16 @@ def login(username, password):
                 return role
         return None
 
-def load_user_data(username=None):
+def load_user_data(username):
     with engine.begin() as conn:
-        if username:
-            rows = conn.execute(sa.select(data_table).where(data_table.c.username==username)).fetchall()
-        else:
-            rows = conn.execute(sa.select(data_table)).fetchall()
-    return pd.DataFrame([r._mapping for r in rows])
+        rows = conn.execute(sa.select(data_table).where(data_table.c.username==username)).fetchall()
+    df = pd.DataFrame([r._mapping for r in rows])
+    if not df.empty:
+        st.session_state['tree_data'] = df[['date','height','leaves','notes','prune']]
+        st.session_state['schedule'] = df[['date','task','task_done']]
+    else:
+        st.session_state['tree_data'] = pd.DataFrame(columns=['date','height','leaves','notes','prune'])
+        st.session_state['schedule'] = pd.DataFrame(columns=['date','task','task_done'])
 
 # ---------- Auth UI ----------
 if st.session_state['user'] is None:
@@ -135,7 +132,8 @@ if st.session_state['user'] is None:
         if role:
             st.session_state['user'] = username
             st.session_state['role'] = role
-            st.success(t(f"ورود موفق ✅ نقش: {role}", f"Login successful ✅ Role: {role}"))
+            load_user_data(username)
+            st.experimental_rerun()
         else: st.error(t("نام کاربری یا رمز اشتباه است.","Wrong username or password."))
 
     if mode == t("دمو","Demo"):
@@ -153,3 +151,29 @@ if st.session_state['user'] is None:
             st.success(f"{t('نتیجه','Result')}: {info['name']}")
             st.write(f"**{t('توضیح','Description')}:** {info['desc']}")
             st.write(f"**{t('درمان','Treatment')}:** {info['treatment']}")
+
+# ---------- Main App ----------
+else:
+    menu = st.sidebar.selectbox(t("منو","Menu"), [t("🏠 خانه","Home"), t("🍎 تشخیص بیماری","Disease"), t("🌱 ثبت و رصد","Tracking"), t("📅 برنامه زمان‌بندی","Schedule"), t("📈 پیش‌بینی رشد","Prediction"), t("📥 دانلود گزارش","Download"), t("🚪 خروج","Logout")])
+    
+    if menu == t("🚪 خروج","Logout"):
+        st.session_state['user'] = None
+        st.experimental_rerun()
+
+    # ---------- Tracking ----------
+    if menu == t("🌱 ثبت و رصد","Tracking"):
+        st.header(t("ثبت و رصد رشد نهال","Seedling Tracking"))
+        with st.expander(t("➕ ثبت اندازه‌گیری جدید","➕ Add Measurement")):
+            date = st.date_input(t("تاریخ","Date"), value=datetime.today())
+            height = st.number_input(t("ارتفاع (cm)","Height (cm)"), min_value=0.0, step=0.5)
+            leaves = st.number_input(t("تعداد برگ‌ها","Leaves"), min_value=0, step=1)
+            notes = st.text_area(t("توضیحات","Notes"))
+            prune = st.checkbox(t("نیاز به هرس؟","Prune needed?"))
+            if st.button(t("ثبت","Submit")):
+                new_row = pd.DataFrame([[date, height, leaves, notes, prune]], columns=['date','height','leaves','notes','prune'])
+                st.session_state['tree_data'] = pd.concat([st.session_state['tree_data'], new_row], ignore_index=True)
+                st.success(t("ثبت شد ✅","Added ✅"))
+        if not st.session_state['tree_data'].empty:
+            st.dataframe(st.session_state['tree_data'])
+            fig = px.line(st.session_state['tree_data'], x='date', y='height', title=t("روند ارتفاع","Height Trend"))
+            st.plotly_chart(fig, use_container_width=True)
