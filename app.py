@@ -1,4 +1,4 @@
-# app_seedling_pro_full_bilingual_fixed.py
+# app_seedling_pro_full_bilingual.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -34,7 +34,7 @@ body{font-family: 'Vazir', sans-serif; direction: rtl;}
 """, unsafe_allow_html=True)
 
 # ---------- Database ----------
-DB_FILE = "users_seedling_full_bilingual_fixed.db"
+DB_FILE = "users_seedling_full_bilingual.db"
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
 
@@ -91,7 +91,6 @@ def register(username, password, role='user'):
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     with engine.begin() as conn:
         conn.execute(users_table.insert().values(username=username, password_hash=hashed, role=role))
-        # Initialize schedule data for user
         start_date = datetime.today()
         schedule=[]
         for week in range(52):
@@ -118,3 +117,39 @@ def load_user_data(username=None):
         else:
             rows = conn.execute(sa.select(data_table)).fetchall()
     return pd.DataFrame([r._mapping for r in rows])
+
+# ---------- Auth UI ----------
+if st.session_state['user'] is None:
+    mode = st.sidebar.radio(t("حالت","Mode"), [t("ورود","Login"), t("ثبت نام","Sign Up"), t("دمو","Demo")])
+    username = st.text_input(t("نام کاربری","Username"))
+    password = st.text_input(t("رمز عبور","Password"), type="password")
+
+    if mode == t("ثبت نام","Sign Up") and st.button(t("ثبت نام","Register")):
+        if username and password:
+            register(username, password)
+            st.success(t("ثبت نام انجام شد. اکنون وارد شوید.","Registered successfully. Please login."))
+        else: st.error(t("نام کاربری و رمز را وارد کنید.","Provide username & password."))
+
+    if mode == t("ورود","Login") and st.button(t("ورود","Login")):
+        role = login(username, password)
+        if role:
+            st.session_state['user'] = username
+            st.session_state['role'] = role
+            st.success(t(f"ورود موفق ✅ نقش: {role}", f"Login successful ✅ Role: {role}"))
+        else: st.error(t("نام کاربری یا رمز اشتباه است.","Wrong username or password."))
+
+    if mode == t("دمو","Demo"):
+        st.header(t("دمو","Demo Mode"))
+        f = st.file_uploader(t("آپلود تصویر برگ","Upload leaf image"), type=["jpg","jpeg","png"])
+        if f:
+            st.image(f, use_column_width=True)
+            preds = predict_probs(f)
+            idx = int(np.argmax(preds))
+            for i, cls in enumerate(class_labels):
+                pct = preds[i]*100
+                color = "#2d9f3f" if cls=="apple_healthy" else "#e53935"
+                st.markdown(f"<div style='margin-top:8px'><div style='background:#f1f5f9;border-radius:10px;padding:6px'><div style='background:{color};color:#fff;padding:6px;border-radius:6px;width:{int(pct)}%'>{pct:.1f}% {disease_info[cls]['name']}</div></div></div>", unsafe_allow_html=True)
+            info = disease_info[class_labels[idx]]
+            st.success(f"{t('نتیجه','Result')}: {info['name']}")
+            st.write(f"**{t('توضیح','Description')}:** {info['desc']}")
+            st.write(f"**{t('درمان','Treatment')}:** {info['treatment']}")
