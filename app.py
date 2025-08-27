@@ -1,4 +1,4 @@
-# app_seedling_pro_final.py
+# app_seedling_pro_final_safe.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -37,7 +37,7 @@ body{font-family: 'Vazir', sans-serif; direction: rtl;}
 # ---------- Database (Persistent) ----------
 DB_DIR = os.path.join(os.getcwd(), "data")
 os.makedirs(DB_DIR, exist_ok=True)
-DB_FILE = os.path.join(DB_DIR, "users_seedling_final.db")
+DB_FILE = os.path.join(DB_DIR, "users_seedling_final_safe.db")
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
 
@@ -125,6 +125,8 @@ if mode == t("ورود","Login") and st.button(t("ورود","Login")):
             st.session_state['schedule'] = pd.DataFrame(columns=['date','task','task_done'])
         load_user_data(username)
         st.success(t("ورود موفق ✅","Login successful ✅"))
-        st.experimental_rerun()  # session state بروز می‌شود و اپ دوباره بارگذاری می‌شود
-    else:
-        st.error(t("نام کاربری یا رمز اشتباه است.","Wrong username or password."))
+
+# ---------- Dashboard ----------
+if st.session_state['user']:
+    st.write(f"{t('خوش آمدید','Welcome')}, {st.session_state['user']}!")
+    # اینجا می‌توانید تمام بخش‌های Home, Tracking, Schedule, Prediction, Download, Logout را اضافه کنید
