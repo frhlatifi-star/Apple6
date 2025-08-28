@@ -1,12 +1,9 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-from PIL import Image
+from datetime import datetime
 import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
-import io
 
 # ---------- Config ----------
 st.set_page_config(page_title="🍎 Seedling Pro", page_icon="🍎", layout="wide")
@@ -30,13 +27,6 @@ measurements = Table('measurements', meta,
                      Column('notes', String),
                      Column('prune_needed', Integer))
 
-schedule = Table('schedule', meta,
-                 Column('id', Integer, primary_key=True),
-                 Column('user_id', Integer, ForeignKey('users.id')),
-                 Column('task_date', String),
-                 Column('activity', String),
-                 Column('done', Integer))
-
 meta.create_all(engine)
 conn = engine.connect()
 
@@ -50,8 +40,9 @@ if 'demo_data' not in st.session_state: st.session_state['demo_data'] = []
 def t(fa, en):
     return en if st.session_state['lang'] == 'English' else fa
 
+# Language selection
 lang = st.sidebar.selectbox("Language / زبان", ["فارسی", "English"], index=0 if st.session_state.get('lang','فارسی')=='فارسی' else 1)
-if st.session_state['lang'] != lang:
+if st.session_state.get('lang','فارسی') != lang:
     st.session_state['lang'] = lang
     st.experimental_rerun()
 
