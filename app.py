@@ -53,13 +53,26 @@ def hash_password(password):
 def check_password(password, hashed):
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
+# ---------- RTL style for Persian ----------
+st.markdown(
+    """
+    <style>
+    body, div, h1, h2, h3, h4, h5, h6, p, label {
+        direction: rtl;
+        text-align: right;
+    }
+    </style>
+    """, unsafe_allow_html=True
+)
+
 # ---------- Login / SignUp ----------
 if st.session_state['user_id'] is None:
+    # Logo + App Title
     st.markdown(
         """
         <div style='display:flex; align-items:center;'>
             <img src='https://i.imgur.com/4Y2E2XQ.png' width='60' style='margin-right:15px;'/>
-            <h2 style='margin:0;'>سیبتک 🍎 مدیریت نهال</h2>
+            <h2>سیبتک 🍎 مدیریت نهال</h2>
         </div>
         """, unsafe_allow_html=True
     )
@@ -88,17 +101,19 @@ if st.session_state['user_id'] is None:
         username = st.text_input("نام کاربری")
         password = st.text_input("رمز عبور", type="password")
         if st.button("ورود"):
-            sel = sa.select(users_table).where(users_table.c.username == username)
-            r = conn.execute(sel).mappings().first()
-            if not r:
-                st.error("نام کاربری یافت نشد.")
-            elif check_password(password, r['password_hash']):
-                st.session_state['user_id'] = r['id']
-                st.session_state['username'] = r['username']
-                st.experimental_set_query_params(logged_in="true")  # Safe rerun
-                st.experimental_rerun()
-            else:
-                st.error("رمز عبور اشتباه است.")
+            try:
+                sel = sa.select(users_table).where(users_table.c.username == username)
+                r = conn.execute(sel).mappings().first()
+                if not r:
+                    st.error("نام کاربری یافت نشد.")
+                elif check_password(password, r['password_hash']):
+                    st.session_state['user_id'] = r['id']
+                    st.session_state['username'] = r['username']
+                    st.experimental_rerun()
+                else:
+                    st.error("رمز عبور اشتباه است.")
+            except Exception as e:
+                st.error(f"خطا در ورود: {e}")
 
     else:  # Demo
         st.subheader("دمو")
@@ -114,8 +129,8 @@ if st.session_state['user_id'] is None:
                 df_demo = pd.DataFrame(st.session_state['demo_data'])
                 st.dataframe(df_demo)
 
+# ---------- Logged-in Menu ----------
 else:
-    # ---------- Logged-in Menu ----------
     st.sidebar.header(f"خوش آمدید، {st.session_state['username']}")
     menu = st.sidebar.selectbox("منو", ["🏠 خانه", "🌱 پایش", "📅 زمان‌بندی", "📈 پیش‌بینی", "🍎 بیماری", "📥 دانلود", "🚪 خروج"])
     user_id = st.session_state['user_id']
@@ -123,7 +138,6 @@ else:
     if menu == "🚪 خروج":
         st.session_state['user_id'] = None
         st.session_state['username'] = None
-        st.experimental_set_query_params(logged_in="false")
         st.experimental_rerun()
 
     # ---------- Home ----------
@@ -145,10 +159,13 @@ else:
                                                           height=height, leaves=leaves, notes=notes,
                                                           prune_needed=int(prune)))
                 st.success("اندازه‌گیری ذخیره شد.")
-        sel = sa.select(measurements).where(measurements.c.user_id == user_id).order_by(measurements.c.date.desc())
-        df = pd.DataFrame(conn.execute(sel).mappings().all())
-        if not df.empty:
-            st.dataframe(df)
+        try:
+            sel = sa.select(measurements).where(measurements.c.user_id == user_id).order_by(measurements.c.date.desc())
+            df = pd.DataFrame(conn.execute(sel).mappings().all())
+            if not df.empty:
+                st.dataframe(df)
+        except Exception as e:
+            st.error(f"خطا در بارگذاری پایش: {e}")
 
     # ---------- Schedule ----------
     elif menu == "📅 زمان‌بندی":
@@ -160,14 +177,17 @@ else:
             if st.button("ثبت برنامه"):
                 conn.execute(schedule_table.insert().values(user_id=user_id, task=task, date=str(date), notes=notes))
                 st.success("برنامه ثبت شد.")
-        sel = sa.select(schedule_table).where(schedule_table.c.user_id == user_id).order_by(schedule_table.c.date.desc())
-        df = pd.DataFrame(conn.execute(sel).mappings().all())
-        if not df.empty:
-            st.dataframe(df)
+        try:
+            sel = sa.select(schedule_table).where(schedule_table.c.user_id == user_id).order_by(schedule_table.c.date.desc())
+            df = pd.DataFrame(conn.execute(sel).mappings().all())
+            if not df.empty:
+                st.dataframe(df)
+        except Exception as e:
+            st.error(f"خطا در بارگذاری زمان‌بندی: {e}")
 
-    # ---------- Prediction (Demo) ----------
+    # ---------- Prediction ----------
     elif menu == "📈 پیش‌بینی":
-        st.header("پیش‌بینی دموی تصویری")
+        st.header("پیش‌بینی")
         f = st.file_uploader("آپلود تصویر برگ/میوه/ساقه", type=["jpg","jpeg","png"])
         if f:
             st.image(f, use_container_width=True)
@@ -184,10 +204,13 @@ else:
     # ---------- Download ----------
     elif menu == "📥 دانلود":
         st.header("دانلود داده‌ها")
-        sel = sa.select(measurements).where(measurements.c.user_id == user_id)
-        df = pd.DataFrame(conn.execute(sel).mappings().all())
-        if not df.empty:
-            csv = df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button("دانلود CSV", csv, "measurements.csv", "text/csv")
-        else:
-            st.info("داده‌ای برای دانلود موجود نیست.")
+        try:
+            sel = sa.select(measurements).where(measurements.c.user_id == user_id)
+            df = pd.DataFrame(conn.execute(sel).mappings().all())
+            if not df.empty:
+                csv = df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button("دانلود CSV", csv, "measurements.csv", "text/csv")
+            else:
+                st.info("داده‌ای برای دانلود موجود نیست.")
+        except Exception as e:
+            st.error(f"خطا در بارگذاری داده‌ها: {e}")
