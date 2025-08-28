@@ -237,20 +237,60 @@ elif menu=="🌱 پایش نهال":
         st.line_chart(df.set_index('date')[['height','leaves']])
 
 # ---------- زمان‌بندی ----------
-elif menu=="📅 زمان‌بندی":
-    st.subheader("ثبت فعالیت‌های زمان‌بندی شده")
-    with st.form("schedule_form"):
-        task = st.text_input("نام فعالیت")
-        date = st.date_input("تاریخ")
-        notes = st.text_area("یادداشت")
-        submitted = st.form_submit_button("ثبت")
-        if submitted:
-            with engine.connect() as conn:
-                conn.execute(schedule_table.insert().values(user_id=user_id,task=task,date=str(date),notes=notes))
-                st.success("فعالیت ثبت شد.")
-    with engine.connect() as conn:
-        df = pd.DataFrame(conn.execute(sa.select(schedule_table).where(schedule_table.c.user_id==user_id)).mappings().all())
-    if not df.empty: st.dataframe(df[['date','task','notes']])
+# ---------- Page: Schedule (زمان‌بندی فعالیت‌ها) ----------
+def page_schedule():
+    st.header("📅 زمان‌بندی فعالیت‌ها")
+
+    # بررسی اینکه user_id معتبر است
+    user_id = st.session_state.get('user_id', None)
+    if user_id is None:
+        st.warning("برای مشاهده زمان‌بندی باید وارد شوید.")
+        return
+
+    # افزودن برنامه جدید
+    with st.expander("➕ افزودن برنامه"):
+        with st.form("add_sched"):
+            task = st.text_input("فعالیت")
+            task_date = st.date_input("تاریخ برنامه")
+            task_notes = st.text_area("یادداشت")
+            submit = st.form_submit_button("ثبت برنامه")
+            if submit:
+                if not task:
+                    st.error("عنوان فعالیت را وارد کنید.")
+                else:
+                    try:
+                        with engine.connect() as conn:
+                            conn.execute(
+                                schedule_table.insert().values(
+                                    user_id=user_id,
+                                    task=task,
+                                    date=str(task_date),
+                                    notes=task_notes
+                                )
+                            )
+                        st.success("برنامه ثبت شد.")
+                    except Exception as e:
+                        st.error(f"خطا در ثبت برنامه: {e}")
+
+    # نمایش برنامه‌های ثبت‌شده
+    st.subheader("برنامه‌های ثبت‌شده")
+    try:
+        with engine.connect() as conn:
+            stmt = sa.select(schedule_table).where(schedule_table.c.user_id==user_id).order_by(schedule_table.c.date.desc())
+            rows = conn.execute(stmt).mappings().all()
+            if rows:
+                df = pd.DataFrame(rows)
+                # تبدیل ستون تاریخ به datetime (اختیاری)
+                try:
+                    df['date'] = pd.to_datetime(df['date'])
+                except Exception:
+                    pass
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info("هیچ برنامه‌ای ثبت نشده است.")
+    except Exception as e:
+        st.error(f"خطا در بارگذاری برنامه‌ها: {e}")
+
 
 # ---------- پیش‌بینی سلامت نهال ----------
 elif menu=="📈 پیش‌بینی سلامت نهال":
