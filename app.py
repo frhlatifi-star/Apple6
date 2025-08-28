@@ -36,6 +36,8 @@ h1, h2, h3 {
 </style>
 """, unsafe_allow_html=True)
 
+text_class = 'rtl'
+
 # ---------- Database ----------
 DB_FILE = "users_data.db"
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
@@ -63,8 +65,6 @@ for key, default in [('user_id', None), ('username', None), ('demo_data', [])]:
     if key not in st.session_state:
         st.session_state[key] = default
 
-text_class = 'rtl'
-
 # ---------- Password helpers ----------
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -72,8 +72,15 @@ def hash_password(password):
 def check_password(password, hashed):
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
+# ---------- Logo ----------
+try:
+    st.image("logo.png", width=120)
+except:
+    st.write("لوگو پیدا نشد")
+
+st.markdown(f"<div class='{text_class}'><h1>سیستم مدیریت نهال سیب</h1></div>", unsafe_allow_html=True)
+
 # ---------- Auth ----------
-st.markdown(f"<div class='{text_class}'><img src='logo.png' class='logo'><h1>سیستم مدیریت نهال سیب</h1></div>", unsafe_allow_html=True)
 st.sidebar.header("احراز هویت")
 mode = st.sidebar.radio("حالت", ["ورود", "ثبت‌نام", "دمو"])
 
@@ -106,7 +113,7 @@ elif mode == "ورود":
         elif check_password(password_input, r['password_hash']):
             st.session_state['user_id'] = r['id']
             st.session_state['username'] = r['username']
-            st.experimental_rerun()
+            st.success(f"خوش آمدید {r['username']}")
         else:
             st.error("رمز عبور اشتباه است.")
 
