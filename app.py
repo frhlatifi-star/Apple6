@@ -151,7 +151,7 @@ else:
     elif menu == t("🏠 خانه", "🏠 Home"):
         st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
         st.header(t("داشبورد", "Dashboard"))
-        sel = sa.select(measurements).where(measurements.c.user_id==user_id)
+        sel = sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.asc())
         df = pd.DataFrame(conn.execute(sel).mappings().all())
         if not df.empty:
             st.metric(t("تعداد اندازه‌گیری‌ها", "Measurements"), len(df))
@@ -180,36 +180,10 @@ else:
                 conn.execute(measurements.insert().values(user_id=user_id, date=str(date), height=height, leaves=leaves, notes=notes, prune_needed=int(prune)))
                 conn.commit()
                 st.success(t("اندازه‌گیری ذخیره شد.", "Measurement saved."))
-        sel = sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.desc())
-        df = pd.DataFrame(conn.execute(sel).mappings().all())
+        df = pd.DataFrame(conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.desc())).mappings().all())
         if not df.empty:
             st.dataframe(df)
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------- Schedule ----------
-    elif menu == t("📅 زمان‌بندی", "📅 Schedule"):
-        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
-        st.header(t("زمان‌بندی", "Schedule"))
-        st.info(t("لیست وظایف آینده شما در اینجا نمایش داده می‌شود.", "Your upcoming tasks will be shown here."))
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ---------- Prediction ----------
-    elif menu == t("📈 پیش‌بینی", "📈 Prediction"):
-        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
-        st.header(t("پیش‌بینی رشد", "Growth Prediction"))
-        st.info(t("اینجا نمودار یا پیش‌بینی‌های ساده نمایش داده می‌شوند.", "Sample predictions will be shown here."))
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ---------- Disease ----------
-    elif menu == t("🍎 بیماری", "🍎 Disease"):
-        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
-        st.header(t("تشخیص بیماری", "Disease Detection"))
-        st.info(t("در این بخش می‌توانید بیماری‌های احتمالی را مشاهده کنید.", "Potential diseases can be viewed here."))
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ---------- Download ----------
-    elif menu == t("📥 دانلود", "📥 Download"):
-        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
-        st.header(t("دانلود داده‌ها", "Download Data"))
-        st.info(t("می‌توانید داده‌های پایش خود را دانلود کنید.", "You can download your tracking data here."))
-        st.markdown('</div>', unsafe_allow_html=True)
+    elif menu == t("📅 زمان‌بندی", "📅 Schedule
