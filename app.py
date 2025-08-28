@@ -8,26 +8,24 @@ import os
 import base64
 import bcrypt
 import sqlalchemy as sa
-from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
+from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
 
-# ---------- Config ----------
+# ---------- Page Config ----------
 st.set_page_config(page_title="سیبتک 🍎 مدیریت نهال", page_icon="🍎", layout="wide")
 
-# ---------- CSS ----------
+# ---------- CSS / RTL ----------
 st.markdown("""
 <style>
-/* راست چین و فونت فارسی */
-html, body, [class*="css"] {direction: rtl !important; text-align: right !important; font-family: 'Vazirmatn', Tahoma, sans-serif; background-color: #e6f2e6;}
-/* دکمه‌ها */
-.stButton>button {cursor: pointer; background-color: #4CAF50; color: white; border-radius: 8px; padding: 8px 16px; font-weight: bold;}
-.stButton>button:hover {background-color: #45a049;}
-/* کارت‌ها */
-.card {background-color: #ffffff; border-radius: 12px; padding: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 15px;}
-.card h3 {margin: 0;}
-.card .metric {font-size: 24px; font-weight: bold;}
-/* تکست‌باکس‌ها سفید */
-div.stTextInput > div > input {background-color: white !important; color: black !important;}
-textarea {background-color: white !important; color: black !important;}
+:root {
+    --accent: #2e7d32;
+    --accent-2: #388e3c;
+    --bg-1: #eaf9e7;
+    --card: #ffffff;
+}
+.block-container { direction: rtl !important; text-align: right !important; padding: 1.2rem 2rem; background: var(--bg-1); }
+body { font-family: Vazirmatn, Tahoma, sans-serif; }
+.stButton>button { background-color: var(--accent-2) !important; color: white !important; border-radius: 8px !important; padding: 8px 16px; }
+.card { background: var(--card); padding: 1rem; border-radius: 12px; margin-bottom:10px; box-shadow:0 4px 8px rgba(0,0,0,0.1);}
 </style>
 """, unsafe_allow_html=True)
 
@@ -36,13 +34,14 @@ DB_FILE = "users_data.db"
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
 
-users_table = Table('users', meta,
+users_table = Table(
+    'users', meta,
     Column('id', Integer, primary_key=True),
     Column('username', String, unique=True, nullable=False),
     Column('password_hash', String, nullable=False)
 )
-
-measurements = Table('measurements', meta,
+measurements = Table(
+    'measurements', meta,
     Column('id', Integer, primary_key=True),
     Column('user_id', Integer, ForeignKey('users.id')),
     Column('date', String),
@@ -51,7 +50,6 @@ measurements = Table('measurements', meta,
     Column('notes', String),
     Column('prune_needed', Integer)
 )
-
 meta.create_all(engine)
 
 # ---------- Helpers ----------
@@ -63,9 +61,9 @@ def check_password(password: str, hashed: str) -> bool:
 
 # ---------- Session defaults ----------
 if 'user_id' not in st.session_state:
-    st.session_state['user_id'] = None
+    st.session_state.user_id = None
 if 'username' not in st.session_state:
-    st.session_state['username'] = None
+    st.session_state.username = None
 
 # ---------- UI Header ----------
 def app_header():
@@ -73,15 +71,15 @@ def app_header():
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
             encoded = base64.b64encode(f.read()).decode()
-        img_html = f"<img src='data:image/png;base64,{encoded}' width='64' style='border-radius:12px;margin-left:12px;'>"
+        img_html = f"<img src='data:image/png;base64,{encoded}' width='64' style='border-radius:12px;margin-left:10px;'>"
     else:
         img_html = "<div style='font-size:36px;'>🍎</div>"
     st.markdown(f"""
-    <div style='display:flex;align-items:center;margin-bottom:20px;'>
+    <div style='display:flex;align-items:center;margin-bottom:10px;'>
         {img_html}
         <div>
             <h2 style='margin:0'>سیبتک</h2>
-            <small style='color:#666'>مدیریت و پایش نهال</small>
+            <small style='color:#555'>مدیریت و پایش نهال</small>
         </div>
     </div>
     <hr/>
@@ -90,105 +88,115 @@ def app_header():
 app_header()
 
 # ---------- Authentication ----------
-if st.session_state['user_id'] is None:
+def auth_ui():
     st.subheader("ورود / ثبت‌نام")
-    col1, col2 = st.columns([1,2])
-    with col1:
-        mode = st.radio("حالت:", ["ورود","ثبت‌نام","دمو"])
-    with col2:
-        st.write("")
-
-    if mode == "ثبت‌نام":
-        username = st.text_input("نام کاربری", key="signup_username")
-        password = st.text_input("رمز عبور", type="password", key="signup_password")
+    mode = st.radio("حالت:", ["ورود","ثبت‌نام"], horizontal=True)
+    if mode=="ثبت‌نام":
+        u = st.text_input("نام کاربری", key="signup_u")
+        p = st.text_input("رمز عبور", type="password", key="signup_p")
         if st.button("ثبت‌نام"):
-            if not username or not password:
+            if not u or not p:
                 st.error("نام کاربری و رمز عبور را وارد کنید.")
             else:
-                try:
-                    with engine.connect() as conn:
-                        sel = sa.select(users_table).where(users_table.c.username==username)
-                        if conn.execute(sel).mappings().first():
-                            st.error("این نام کاربری قبلاً ثبت شده است.")
-                        else:
-                            conn.execute(users_table.insert().values(username=username,password_hash=hash_password(password)))
-                            st.success("ثبت‌نام انجام شد. اکنون وارد شوید.")
-                except Exception as e:
-                    st.error(f"خطا در ثبت‌نام: {e}")
-    elif mode == "ورود":
-        username = st.text_input("نام کاربری", key="login_username")
-        password = st.text_input("رمز عبور", type="password", key="login_password")
-        if st.button("ورود"):
-            try:
                 with engine.connect() as conn:
-                    r = conn.execute(sa.select(users_table).where(users_table.c.username==username)).mappings().first()
-                    if not r:
-                        st.error("نام کاربری یافت نشد.")
-                    elif check_password(password,r['password_hash']):
-                        st.session_state['user_id'] = int(r['id'])
-                        st.session_state['username'] = r['username']
-                        st.experimental_rerun()
+                    sel = sa.select(users_table).where(users_table.c.username==u)
+                    if conn.execute(sel).mappings().first():
+                        st.error("این نام کاربری قبلاً ثبت شده.")
                     else:
-                        st.error("رمز عبور اشتباه است.")
-            except Exception as e:
-                st.error(f"خطا در ورود: {e}")
+                        conn.execute(users_table.insert().values(username=u, password_hash=hash_password(p)))
+                        st.success("ثبت‌نام انجام شد. اکنون وارد شوید.")
     else:
-        st.info("حالت دمو: پیش‌بینی نمونه بدون ثبت نام")
-        uploaded = st.file_uploader("یک تصویر آپلود کنید", type=["jpg","jpeg","png"])
-        if uploaded:
-            img = Image.open(uploaded)
-            st.image(img, use_container_width=True)
-            st.info("در این نسخه دمو، تحلیل تصویر انجام نمی‌شود.")
-
-# ---------- Main Menu ----------
-if st.session_state['user_id'] is not None:
-    st.subheader(f"خوش آمدید، {st.session_state['username']}")
-    menu = st.radio("منو:", ["🏠 خانه","🌱 پایش نهال","🚪 خروج"], index=0, horizontal=True)
-
-    user_id = st.session_state['user_id']
-
-    if menu == "🚪 خروج":
-        st.session_state['user_id'] = None
-        st.session_state['username'] = None
-        st.experimental_rerun()
-
-    elif menu == "🏠 خانه":
-        st.header("خانه")
-        with engine.connect() as conn:
-            m_sel = sa.select(measurements).where(measurements.c.user_id==user_id)
-            ms = conn.execute(m_sel).mappings().all()
-        st.markdown(f"<div class='card'><h3>تعداد اندازه‌گیری‌ها: {len(ms)}</h3></div>", unsafe_allow_html=True)
-
-    elif menu == "🌱 پایش نهال":
-        st.header("پایش نهال — ثبت رشد")
-        with st.form("add_measure"):
-            date = st.date_input("تاریخ", value=datetime.today())
-            height = st.number_input("ارتفاع (cm)", min_value=0, step=1)
-            leaves = st.number_input("تعداد برگ", min_value=0, step=1)
-            prune = st.checkbox("نیاز به هرس؟")
-            notes = st.text_area("یادداشت")
-            submitted = st.form_submit_button("ثبت اندازه‌گیری")
-            if submitted:
-                try:
-                    with engine.connect() as conn:
-                        conn.execute(measurements.insert().values(
-                            user_id=user_id,
-                            date=str(date),
-                            height=int(height),
-                            leaves=int(leaves),
-                            prune_needed=int(prune),
-                            notes=notes
-                        ))
-                    st.success("اندازه‌گیری ثبت شد.")
-                except Exception as e:
-                    st.error(f"خطا در ثبت: {e}")
-        st.subheader("تاریخچه اندازه‌گیری‌ها")
-        try:
+        u = st.text_input("نام کاربری", key="login_u")
+        p = st.text_input("رمز عبور", type="password", key="login_p")
+        if st.button("ورود"):
             with engine.connect() as conn:
-                sel = sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.desc())
-                rows = conn.execute(sel).mappings().all()
-                if rows:
-                    df = pd.DataFrame(rows)
-                    st.dataframe(df, use_container_width=True)
-        except Exception as e:
-            st.error(f"خطا در بارگذاری: {e}")
+                r = conn.execute(sa.select(users_table).where(users_table.c.username==u)).mappings().first()
+                if not r:
+                    st.error("نام کاربری یافت نشد.")
+                elif check_password(p,r['password_hash']):
+                    st.session_state.user_id = r['id']
+                    st.session_state.username = r['username']
+                    st.experimental_rerun()
+                else:
+                    st.error("رمز عبور اشتباه است.")
+
+if st.session_state.user_id is None:
+    auth_ui()
+    st.stop()
+
+# ---------- Sidebar Menu ----------
+menu = st.sidebar.selectbox(f"خوش آمدید، {st.session_state.username}", [
+    "🏠 خانه",
+    "🌱 پایش نهال",
+    "📈 پیش‌بینی هرس",
+    "📥 دانلود داده‌ها",
+    "🚪 خروج"
+])
+
+user_id = st.session_state.user_id
+
+if menu=="🚪 خروج":
+    st.session_state.user_id=None
+    st.session_state.username=None
+    st.experimental_rerun()
+
+# ---------- Pages ----------
+if menu=="🏠 خانه":
+    st.header("خانه")
+    with engine.connect() as conn:
+        m_sel = sa.select(measurements).where(measurements.c.user_id==user_id)
+        ms = conn.execute(m_sel).mappings().all()
+    st.markdown(f"<div class='card'><h3>تعداد اندازه‌گیری‌ها: {len(ms)}</h3></div>", unsafe_allow_html=True)
+
+elif menu=="🌱 پایش نهال":
+    st.header("پایش نهال")
+    with st.form("add_measure"):
+        date = st.date_input("تاریخ", value=datetime.today())
+        height = st.number_input("ارتفاع (cm)", min_value=0, step=1)
+        leaves = st.number_input("تعداد برگ", min_value=0, step=1)
+        notes = st.text_area("یادداشت")
+        prune = st.checkbox("نیاز به هرس؟")
+        if st.form_submit_button("ثبت"):
+            with engine.connect() as conn:
+                conn.execute(measurements.insert().values(
+                    user_id=user_id,
+                    date=str(date),
+                    height=int(height),
+                    leaves=int(leaves),
+                    notes=notes,
+                    prune_needed=int(prune)
+                ))
+                st.success("ثبت شد.")
+
+    # نمایش نمودار رشد
+    with engine.connect() as conn:
+        rows = conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date)).mappings().all()
+        if rows:
+            df = pd.DataFrame(rows)
+            df['date'] = pd.to_datetime(df['date'])
+            st.line_chart(df.set_index('date')['height'])
+
+elif menu=="📈 پیش‌بینی هرس":
+    st.header("پیش‌بینی نیاز به هرس (بارگذاری تصویر)")
+    uploaded = st.file_uploader("آپلود تصویر نهال", type=["jpg","jpeg","png"])
+    if uploaded:
+        img = Image.open(uploaded)
+        st.image(img, use_container_width=True)
+        # الگوریتم جایگزین ساده
+        stat = ImageStat.Stat(img.convert("RGB"))
+        r,g,b = np.array(img)[:,:,0], np.array(img)[:,:,1], np.array(img)[:,:,2]
+        yellow_ratio = ((r>g)&(g>=b)).mean()
+        green_ratio = ((g>r+10)&(g>b+10)).mean()
+        needs_prune = green_ratio<0.12 or yellow_ratio>0.25
+        st.success(f"نیاز به هرس: {'بله' if needs_prune else 'خیر'}")
+
+elif menu=="📥 دانلود داده‌ها":
+    st.header("دانلود داده‌ها")
+    with engine.connect() as conn:
+        rows = conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id)).mappings().all()
+        if rows:
+            df = pd.DataFrame(rows)
+            csv = df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("دانلود اندازه‌گیری‌ها (CSV)", csv, "measurements.csv", "text/csv")
+        else:
+            st.info("هیچ داده‌ای موجود نیست.")
