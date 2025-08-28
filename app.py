@@ -73,6 +73,7 @@ if st.session_state['user_id'] is None:
                 else:
                     hashed = hash_password(password)
                     conn.execute(users_table.insert().values(username=username, password_hash=hashed))
+                    conn.commit()  # 🔑 مهم: تغییرات ذخیره شود
                     st.success(t("ثبت شد. لطفا وارد شوید.", "Registered. Please login."))
 
     elif mode == t("ورود", "Login"):
@@ -128,6 +129,7 @@ else:
             prune = st.checkbox(t("نیاز به هرس؟", "Prune needed?"))
             if st.button(t("ثبت", "Submit")):
                 conn.execute(measurements.insert().values(user_id=user_id, date=str(date), height=height, leaves=leaves, notes=notes, prune_needed=int(prune)))
+                conn.commit()  # 🔑 تغییرات ذخیره شود
                 st.success(t("اندازه‌گیری ذخیره شد.", "Measurement saved."))
         sel = sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.desc())
         df = pd.DataFrame(conn.execute(sel).mappings().all())
