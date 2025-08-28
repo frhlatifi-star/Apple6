@@ -44,7 +44,7 @@ def t(fa, en):
 lang = st.sidebar.selectbox("Language / زبان", ["فارسی", "English"], index=0 if st.session_state.get('lang','فارسی')=='فارسی' else 1)
 if st.session_state.get('lang','فارسی') != lang:
     st.session_state['lang'] = lang
-    st.experimental_rerun()
+    st.rerun()
 
 # ---------- Password helpers ----------
 def hash_password(password):
@@ -73,7 +73,7 @@ if st.session_state['user_id'] is None:
                 else:
                     hashed = hash_password(password)
                     conn.execute(users_table.insert().values(username=username, password_hash=hashed))
-                    conn.commit()  # 🔑 مهم: تغییرات ذخیره شود
+                    conn.commit()
                     st.success(t("ثبت شد. لطفا وارد شوید.", "Registered. Please login."))
 
     elif mode == t("ورود", "Login"):
@@ -88,7 +88,7 @@ if st.session_state['user_id'] is None:
             elif check_password(password, r['password_hash']):
                 st.session_state['user_id'] = r['id']
                 st.session_state['username'] = r['username']
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error(t("رمز عبور اشتباه است.", "Wrong password."))
 
@@ -116,7 +116,7 @@ else:
     if menu == t("🚪 خروج", "🚪 Logout"):
         st.session_state['user_id'] = None
         st.session_state['username'] = None
-        st.experimental_rerun()
+        st.rerun()
 
     # ---------- Tracking ----------
     elif menu == t("🌱 پایش", "🌱 Tracking"):
@@ -129,7 +129,7 @@ else:
             prune = st.checkbox(t("نیاز به هرس؟", "Prune needed?"))
             if st.button(t("ثبت", "Submit")):
                 conn.execute(measurements.insert().values(user_id=user_id, date=str(date), height=height, leaves=leaves, notes=notes, prune_needed=int(prune)))
-                conn.commit()  # 🔑 تغییرات ذخیره شود
+                conn.commit()
                 st.success(t("اندازه‌گیری ذخیره شد.", "Measurement saved."))
         sel = sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.desc())
         df = pd.DataFrame(conn.execute(sel).mappings().all())
