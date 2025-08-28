@@ -11,8 +11,8 @@ import io
 # ---------- Config ----------
 st.set_page_config(page_title="🍎 Seedling Pro", page_icon="🍎", layout="wide")
 
-# ---------- Helper for translations ----------
-lang = st.sidebar.selectbox("Language / زبان", ["English", "فارسی"])
+# ---------- Language selection ----------
+lang = st.sidebar.selectbox("Language / زبان", ["فارسی", "English"])
 EN = (lang == "English")
 
 def t(fa, en):
@@ -23,13 +23,11 @@ DB_FILE = "users_data.db"
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
 
-# Users table
 users_table = Table('users', meta,
                     Column('id', Integer, primary_key=True),
                     Column('username', String, unique=True, nullable=False),
                     Column('password_hash', String, nullable=False))
 
-# Measurements table
 measurements = Table('measurements', meta,
                      Column('id', Integer, primary_key=True),
                      Column('user_id', Integer, ForeignKey('users.id')),
@@ -39,7 +37,6 @@ measurements = Table('measurements', meta,
                      Column('notes', String),
                      Column('prune_needed', Integer))
 
-# Schedule table
 schedule = Table('schedule', meta,
                  Column('id', Integer, primary_key=True),
                  Column('user_id', Integer, ForeignKey('users.id')),
@@ -54,7 +51,7 @@ conn = engine.connect()
 if 'user_id' not in st.session_state: st.session_state['user_id'] = None
 if 'username' not in st.session_state: st.session_state['username'] = None
 
-# ---------- Helper Functions ----------
+# ---------- Password helpers ----------
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
@@ -75,7 +72,7 @@ if st.session_state['user_id'] is None:
                 st.error(t("Provide username & password.", "Provide username & password."))
             else:
                 sel = sa.select(users_table).where(users_table.c.username==username)
-                r = conn.execute(sel).first()
+                r = conn.execute(sel).mappings().first()
                 if r:
                     st.error(t("Username already exists.", "Username already exists."))
                 else:
@@ -89,7 +86,7 @@ if st.session_state['user_id'] is None:
         password = st.text_input(t("Password", "Password"), type="password")
         if st.button(t("Login", "Login")):
             sel = sa.select(users_table).where(users_table.c.username==username)
-            r = conn.execute(sel).mappings().first()  # convert Row to dict-like mapping
+            r = conn.execute(sel).mappings().first()
             if not r:
                 st.error(t("Username not found.", "Username not found."))
             elif check_password(password, r['password_hash']):
@@ -114,19 +111,16 @@ else:
 
     user_id = st.session_state['user_id']
 
-    # ---------- Logout ----------
     if menu == t("🚪 Logout", "🚪 Logout"):
         st.session_state['user_id'] = None
         st.session_state['username'] = None
         st.experimental_rerun()
 
-    # ---------- Home ----------
-    if menu == t("🏠 Home", "🏠 Home"):
+    elif menu == t("🏠 Home", "🏠 Home"):
         st.header(t("Dashboard Overview", "Dashboard Overview"))
         df = pd.read_sql(sa.select(measurements).where(measurements.c.user_id==user_id), conn)
         st.dataframe(df)
 
-    # ---------- Tracking ----------
     elif menu == t("🌱 Tracking", "🌱 Tracking"):
         st.header(t("Seedling Tracking", "Seedling Tracking"))
         with st.expander(t("Add Measurement", "Add Measurement")):
@@ -139,13 +133,11 @@ else:
                 conn.execute(measurements.insert().values(user_id=user_id, date=str(date), height=height, leaves=leaves, notes=notes, prune_needed=int(prune)))
                 st.success(t("Measurement added", "Measurement added"))
 
-    # ---------- Schedule ----------
     elif menu == t("📅 Schedule", "📅 Schedule"):
         st.header(t("Schedule", "Schedule"))
         df_s = pd.read_sql(sa.select(schedule).where(schedule.c.user_id==user_id), conn)
         st.dataframe(df_s)
 
-    # ---------- Prediction ----------
     elif menu == t("📈 Prediction", "📈 Prediction"):
         st.header(t("Growth Prediction", "Growth Prediction"))
         df = pd.read_sql(sa.select(measurements).where(measurements.c.user_id==user_id), conn)
@@ -166,7 +158,6 @@ else:
         else:
             st.info(t("No measurements available", "No measurements available"))
 
-    # ---------- Disease ----------
     elif menu == t("🍎 Disease", "🍎 Disease"):
         st.header(t("Disease Detection", "Disease Detection"))
         f = st.file_uploader(t("Upload leaf/fruit/stem image", "Upload leaf/fruit/stem image"), type=["jpg","jpeg","png"])
@@ -177,7 +168,6 @@ else:
             st.write(t("Description: No issues detected", "Description: No issues detected"))
             st.write(t("Treatment: Continue normal care", "Treatment: Continue normal care"))
 
-    # ---------- Download ----------
     elif menu == t("📥 Download", "📥 Download"):
         st.header(t("Download Reports", "Download Reports"))
         buffer = io.BytesIO()
