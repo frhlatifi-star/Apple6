@@ -34,6 +34,10 @@ body {
 h1, h2, h3 {
     color: #00796b;
 }
+.logo {
+    width: 120px;
+    margin-bottom: 20px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,8 +68,8 @@ if 'user_id' not in st.session_state: st.session_state['user_id'] = None
 if 'username' not in st.session_state: st.session_state['username'] = None
 if 'lang' not in st.session_state: st.session_state['lang'] = 'فارسی'
 if 'demo_data' not in st.session_state: st.session_state['demo_data'] = []
-if 'lang_rerun_done' not in st.session_state: st.session_state['lang_rerun_done'] = False
-if 'login_rerun_done' not in st.session_state: st.session_state['login_rerun_done'] = False
+if 'login_rerun' not in st.session_state: st.session_state['login_rerun'] = False
+if 'lang_rerun' not in st.session_state: st.session_state['lang_rerun'] = False
 
 # ---------- Language ----------
 def t(fa, en):
@@ -76,12 +80,12 @@ with st.sidebar:
     lang_selection = st.selectbox("Language / زبان", ["فارسی", "English"],
                                   index=0 if st.session_state['lang'] == 'فارسی' else 1)
 
-if lang_selection != st.session_state['lang'] and not st.session_state['lang_rerun_done']:
+if lang_selection != st.session_state['lang'] and not st.session_state['lang_rerun']:
     st.session_state['lang'] = lang_selection
-    st.session_state['lang_rerun_done'] = True
-    st.experimental_rerun()
+    st.session_state['lang_rerun'] = True
+    st.stop()  # امن‌ترین روش rerun بدون خطا
 else:
-    st.session_state['lang_rerun_done'] = False
+    st.session_state['lang_rerun'] = False
 
 text_class = 'rtl' if st.session_state['lang'] == 'فارسی' else 'ltr'
 
@@ -94,11 +98,12 @@ def check_password(password, hashed):
 
 # ---------- Auth ----------
 if st.session_state['user_id'] is None:
+    st.markdown(f"<div class='{text_class}'><img src='https://i.imgur.com/jR9Z9yR.png' class='logo'><h1>{t('سیستم مدیریت نهال سیب', 'Seedling Pro')}</h1></div>", unsafe_allow_html=True)
     st.sidebar.header(t("احراز هویت", "Authentication"))
     mode = st.sidebar.radio(t("حالت", "Mode"), [t("ورود", "Login"), t("ثبت‌نام", "Sign Up"), t("دمو", "Demo")])
 
     if mode == t("ثبت‌نام", "Sign Up"):
-        st.header(t("ثبت‌نام", "Sign Up"))
+        st.subheader(t("ثبت‌نام", "Sign Up"))
         username_input = st.text_input(t("نام کاربری", "Username"), key="signup_username")
         password_input = st.text_input(t("رمز عبور", "Password"), type="password", key="signup_password")
         if st.button(t("ثبت", "Register")):
@@ -115,30 +120,26 @@ if st.session_state['user_id'] is None:
                     st.success(t("ثبت شد. لطفا وارد شوید.", "Registered. Please login."))
 
     elif mode == t("ورود", "Login"):
-        st.header(t("ورود", "Login"))
+        st.subheader(t("ورود", "Login"))
         username_input = st.text_input(t("نام کاربری", "Username"), key="login_username")
         password_input = st.text_input(t("رمز عبور", "Password"), type="password", key="login_password")
         if st.button(t("ورود", "Login")):
-            sel = sa.select(users_table).where(users_table.c.username==username_input)
+            sel = sa.select(users_table).where(users_table.c.username == username_input)
             r = conn.execute(sel).mappings().first()
             if not r:
                 st.error(t("نام کاربری یافت نشد.", "Username not found."))
             elif check_password(password_input, r['password_hash']):
                 st.session_state['user_id'] = r['id']
                 st.session_state['username'] = r['username']
-                # پاکسازی ورودی‌ها قبل از rerun
                 st.session_state.pop("login_username", None)
                 st.session_state.pop("login_password", None)
-                if not st.session_state['login_rerun_done']:
-                    st.session_state['login_rerun_done'] = True
-                    st.experimental_rerun()
-                else:
-                    st.session_state['login_rerun_done'] = False
+                st.session_state['login_rerun'] = True
+                st.stop()  # امن‌ترین rerun بدون خطا
             else:
                 st.error(t("رمز عبور اشتباه است.", "Wrong password."))
 
     else:
-        st.header(t("حالت دمو", "Demo Mode"))
+        st.subheader(t("حالت دمو", "Demo Mode"))
         st.info(t("در حالت دمو داده ذخیره نمی‌شود.", "In demo mode, data is not saved."))
         f = st.file_uploader(t("آپلود تصویر برگ/میوه/ساقه", "Upload leaf/fruit/stem image"), type=["jpg","jpeg","png"])
         if f:
