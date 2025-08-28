@@ -16,11 +16,13 @@ DB_FILE = "users_data.db"
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
 
+# Users table
 users_table = Table('users', meta,
                     Column('id', Integer, primary_key=True),
                     Column('username', String, unique=True, nullable=False),
                     Column('password_hash', String, nullable=False))
 
+# Measurements table
 measurements = Table('measurements', meta,
                      Column('id', Integer, primary_key=True),
                      Column('user_id', Integer, ForeignKey('users.id')),
@@ -30,6 +32,7 @@ measurements = Table('measurements', meta,
                      Column('notes', String),
                      Column('prune_needed', Integer))
 
+# Schedule table
 schedule = Table('schedule', meta,
                  Column('id', Integer, primary_key=True),
                  Column('user_id', Integer, ForeignKey('users.id')),
@@ -53,16 +56,50 @@ def check_password(password, hashed):
 
 # ---------- Auth ----------
 if st.session_state['user_id'] is None:
-    st.header("🍎 Seedling Pro — Demo Mode")
-    st.info("Currently in demo mode. Data will not be saved permanently.")
-    
-    f = st.file_uploader("Upload leaf/fruit/stem image for disease detection", type=["jpg","jpeg","png"])
-    if f:
-        st.image(f, use_column_width=True)
-        st.success("Demo prediction: Disease analysis placeholder")
-        st.write("Name: Healthy")
-        st.write("Description: No issues detected")
-        st.write("Treatment: Continue normal care")
+    st.sidebar.header("Authentication")
+    mode = st.sidebar.radio("Mode", ["Login", "Sign Up", "Demo"])
+
+    if mode == "Sign Up":
+        st.header("Sign Up")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Register"):
+            if not username or not password:
+                st.error("Please provide username and password")
+            else:
+                sel = sa.select(users_table).where(users_table.c.username==username)
+                r = conn.execute(sel).first()
+                if r:
+                    st.error("Username already exists")
+                else:
+                    hashed = hash_password(password)
+                    conn.execute(users_table.insert().values(username=username, password_hash=hashed))
+                    st.success("Registered. Please login.")
+
+    elif mode == "Login":
+        st.header("Login")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            sel = sa.select(users_table).where(users_table.c.username==username)
+            r = conn.execute(sel).first()
+            if not r:
+                st.error("Username not found")
+            elif check_password(password, r['password_hash']):
+                st.session_state['user_id'] = r['id']
+                st.session_state['username'] = r['username']
+                st.experimental_rerun()
+            else:
+                st.error("Incorrect password")
+
+    else:
+        # Demo mode
+        st.header("Demo Mode")
+        st.info("Data will not be saved permanently")
+        f = st.file_uploader("Upload leaf/fruit/stem image", type=["jpg","jpeg","png"])
+        if f:
+            st.image(f, use_container_width=True)
+            st.success("Demo prediction: Healthy")
 
 else:
     st.sidebar.header(f"Welcome, {st.session_state['username']}")
@@ -128,7 +165,7 @@ else:
         f = st.file_uploader("Upload leaf/fruit/stem image", type=["jpg","jpeg","png"])
         if f:
             st.image(f, use_container_width=True)
-            st.success("Prediction placeholder")
+            st.success("Prediction placeholder: Healthy")
             st.write("Name: Healthy")
             st.write("Description: No issues detected")
             st.write("Treatment: Continue normal care")
