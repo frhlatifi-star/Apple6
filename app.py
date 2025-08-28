@@ -141,7 +141,7 @@ disease_info = {
 }
 
 # Helper: Jalali string
-ndef to_jalali_str(gdate):
+def to_jalali_str(gdate):
     try:
         if not HAS_JDATETIME or pd.isna(gdate):
             return "-"
