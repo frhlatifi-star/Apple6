@@ -72,7 +72,7 @@ def t(fa, en):
 lang = st.sidebar.selectbox("Language / زبان", ["فارسی", "English"], index=0 if st.session_state.get('lang','فارسی')=='فارسی' else 1)
 if st.session_state.get('lang','فارسی') != lang:
     st.session_state['lang'] = lang
-    st.rerun()
+    st.experimental_rerun()
 
 text_class = 'rtl' if st.session_state['lang'] == 'فارسی' else 'ltr'
 
@@ -103,7 +103,6 @@ if st.session_state['user_id'] is None:
                 else:
                     hashed = hash_password(password)
                     conn.execute(users_table.insert().values(username=username, password_hash=hashed))
-                    conn.commit()
                     st.success(t("ثبت شد. لطفا وارد شوید.", "Registered. Please login."))
 
     elif mode == t("ورود", "Login"):
@@ -118,7 +117,7 @@ if st.session_state['user_id'] is None:
             elif check_password(password, r['password_hash']):
                 st.session_state['user_id'] = r['id']
                 st.session_state['username'] = r['username']
-                st.rerun()
+                st.experimental_rerun()
             else:
                 st.error(t("رمز عبور اشتباه است.", "Wrong password."))
 
@@ -145,7 +144,7 @@ else:
     if menu == t("🚪 خروج", "🚪 Logout"):
         st.session_state['user_id'] = None
         st.session_state['username'] = None
-        st.rerun()
+        st.experimental_rerun()
 
     # ---------- Home ----------
     elif menu == t("🏠 خانه", "🏠 Home"):
@@ -178,7 +177,6 @@ else:
             prune = st.checkbox(t("نیاز به هرس؟", "Prune needed?"))
             if st.button(t("ثبت", "Submit")):
                 conn.execute(measurements.insert().values(user_id=user_id, date=str(date), height=height, leaves=leaves, notes=notes, prune_needed=int(prune)))
-                conn.commit()
                 st.success(t("اندازه‌گیری ذخیره شد.", "Measurement saved."))
         df = pd.DataFrame(conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.desc())).mappings().all())
         if not df.empty:
@@ -186,4 +184,46 @@ else:
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------- Schedule ----------
-    elif menu == t("📅 زمان‌بندی", "📅 Schedule
+    elif menu == t("📅 زمان‌بندی", "📅 Schedule"):
+        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
+        st.header(t("زمان‌بندی فعالیت‌ها", "Activity Schedule"))
+        schedule_df = pd.DataFrame({
+            t("تاریخ", "Date"): [(datetime.today() + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(5)],
+            t("کار", "Task"): ["آبیاری", "کوددهی", "بررسی بیماری", "هرس", "بازرسی رشد"]
+        })
+        st.table(schedule_df)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---------- Prediction ----------
+    elif menu == t("📈 پیش‌بینی", "📈 Prediction"):
+        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
+        st.header(t("پیش‌بینی رشد", "Growth Prediction"))
+        df_pred = pd.DataFrame(conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.asc())).mappings().all())
+        if not df_pred.empty:
+            df_pred['pred_height'] = df_pred['height'] * 1.05
+            chart_pred = alt.Chart(df_pred).mark_line(color='orange', point=True).encode(
+                x='date:T', y='pred_height:Q', tooltip=['date','pred_height']
+            ).properties(width=700, height=300)
+            st.altair_chart(chart_pred, use_container_width=True)
+        else:
+            st.info(t("هیچ داده‌ای برای پیش‌بینی موجود نیست.", "No data for prediction."))
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---------- Disease ----------
+    elif menu == t("🍎 بیماری", "🍎 Disease"):
+        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
+        st.header(t("وضعیت بیماری‌ها", "Disease Status"))
+        st.info(t("در این بخش می‌توانید وضعیت سلامت نهال‌ها را بررسی کنید.", "Check your seedlings health status here."))
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---------- Download ----------
+    elif menu == t("📥 دانلود", "📥 Download"):
+        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
+        st.header(t("دانلود داده‌ها", "Download Data"))
+        df_dl = pd.DataFrame(conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id)).mappings().all())
+        if not df_dl.empty:
+            csv = df_dl.to_csv(index=False).encode('utf-8')
+            st.download_button(label=t("دانلود CSV", "Download CSV"), data=csv, file_name='measurements.csv', mime='text/csv')
+        else:
+            st.info(t("هیچ داده‌ای برای دانلود موجود نیست.", "No data to download."))
+        st.markdown('</div>', unsafe_allow_html=True)
