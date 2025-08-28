@@ -11,17 +11,6 @@ import io
 # ---------- Config ----------
 st.set_page_config(page_title="🍎 Seedling Pro", page_icon="🍎", layout="wide")
 
-# ---------- Language ----------
-if 'lang' not in st.session_state:
-    st.session_state['lang'] = 'فارسی'
-EN = (st.session_state['lang'] == 'English')
-
-def t(fa, en):
-    return en if EN else fa
-
-st.sidebar.selectbox("Language / زبان", ["فارسی", "English"], key='lang', on_change=lambda: st.experimental_rerun())
-EN = (st.session_state['lang'] == 'English')
-
 # ---------- Database ----------
 DB_FILE = "users_data.db"
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
@@ -41,19 +30,22 @@ measurements = Table('measurements', meta,
                      Column('notes', String),
                      Column('prune_needed', Integer))
 
-schedule = Table('schedule', meta,
-                 Column('id', Integer, primary_key=True),
-                 Column('user_id', Integer, ForeignKey('users.id')),
-                 Column('task_date', String),
-                 Column('activity', String),
-                 Column('done', Integer))
-
 meta.create_all(engine)
 conn = engine.connect()
 
 # ---------- Session ----------
 if 'user_id' not in st.session_state: st.session_state['user_id'] = None
 if 'username' not in st.session_state: st.session_state['username'] = None
+if 'lang' not in st.session_state: st.session_state['lang'] = 'فارسی'
+
+# ---------- Language ----------
+def t(fa, en):
+    return en if st.session_state['lang'] == 'English' else fa
+
+def change_lang():
+    st.experimental_rerun()
+
+st.sidebar.selectbox("Language / زبان", ["فارسی", "English"], key='lang', on_change=change_lang)
 
 # ---------- Password helpers ----------
 def hash_password(password):
