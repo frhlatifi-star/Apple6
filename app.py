@@ -7,6 +7,7 @@ from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
 from PIL import Image, ImageStat
 import numpy as np
 import os
+import base64
 
 # Optional ML imports
 try:
@@ -198,12 +199,20 @@ def predict_with_model(pil_img: Image.Image):
     confidence = float(np.max(preds[0])) if preds is not None else 0.0
     return classes[idx] if idx < len(classes) else "نامشخص", f"{int(confidence*100)}%"
 
-# ---------- UI: Header ----------
+# ---------- UI: Header with local logo ----------
 def app_header():
+    logo_path = "logo.png"  # لوگوی شما باید در کنار app.py باشد
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as image_file:
+            encoded_logo = base64.b64encode(image_file.read()).decode()
+        img_tag = f'data:image/png;base64,{encoded_logo}'
+    else:
+        img_tag = ""  # اگر لوگو پیدا نشد، خالی بماند
+
     st.markdown(
-        """
+        f"""
         <div class="app-header">
-            <img src='https://i.imgur.com/4Y2E2XQ.png'/>
+            <img src="{img_tag}" width="64" style="border-radius:12px; margin-left:12px;">
             <div>
                 <h2>سیبتک</h2>
                 <div class='subtitle'>سیبتک — مدیریت و پایش نهال</div>
@@ -215,7 +224,7 @@ def app_header():
 
 app_header()
 
-# ---------- Authentication ----------
+# ---------- Auth screens ----------
 if st.session_state['user_id'] is None:
     col1, col2 = st.columns([1,2])
     with col1:
@@ -287,5 +296,4 @@ else:
         st.success("شما از حساب کاربری خارج شدید.")
         st.experimental_rerun = lambda: None
 
-    # بخش‌های اصلی اپلیکیشن (خانه، پایش، زمان‌بندی، پیش‌بینی، یادداشت، دانلود داده‌ها)
-    # => همان بخش‌های قبلی شما بدون تغییر؛ فقط استایل جدید اعمال شده
+# بخش‌های دیگر اپلیکیشن همان بخش‌های قبلی شما هستند، فقط استایل‌ها اعمال شده‌اند
