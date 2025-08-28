@@ -1,15 +1,14 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
-import altair as alt
 
 # ---------- Config ----------
 st.set_page_config(page_title="🍎 Seedling Pro", page_icon="🍎", layout="wide")
 
-# ---------- Custom CSS for UI ----------
+# ---------- Custom CSS ----------
 st.markdown("""
 <style>
 body {
@@ -68,8 +67,6 @@ if 'user_id' not in st.session_state: st.session_state['user_id'] = None
 if 'username' not in st.session_state: st.session_state['username'] = None
 if 'lang' not in st.session_state: st.session_state['lang'] = 'فارسی'
 if 'demo_data' not in st.session_state: st.session_state['demo_data'] = []
-if 'login_rerun' not in st.session_state: st.session_state['login_rerun'] = False
-if 'lang_rerun' not in st.session_state: st.session_state['lang_rerun'] = False
 
 # ---------- Language ----------
 def t(fa, en):
@@ -80,12 +77,9 @@ with st.sidebar:
     lang_selection = st.selectbox("Language / زبان", ["فارسی", "English"],
                                   index=0 if st.session_state['lang'] == 'فارسی' else 1)
 
-if lang_selection != st.session_state['lang'] and not st.session_state['lang_rerun']:
+if lang_selection != st.session_state['lang']:
     st.session_state['lang'] = lang_selection
-    st.session_state['lang_rerun'] = True
-    st.stop()  # امن‌ترین روش rerun بدون خطا
-else:
-    st.session_state['lang_rerun'] = False
+    st.experimental_rerun()
 
 text_class = 'rtl' if st.session_state['lang'] == 'فارسی' else 'ltr'
 
@@ -98,7 +92,7 @@ def check_password(password, hashed):
 
 # ---------- Auth ----------
 if st.session_state['user_id'] is None:
-    st.markdown(f"<div class='{text_class}'><img src='https://i.imgur.com/jR9Z9yR.png' class='logo'><h1>{t('سیستم مدیریت نهال سیب', 'Seedling Pro')}</h1></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='{text_class}'><img src='logo.png' class='logo'><h1>{t('سیستم مدیریت نهال سیب', 'Seedling Pro')}</h1></div>", unsafe_allow_html=True)
     st.sidebar.header(t("احراز هویت", "Authentication"))
     mode = st.sidebar.radio(t("حالت", "Mode"), [t("ورود", "Login"), t("ثبت‌نام", "Sign Up"), t("دمو", "Demo")])
 
@@ -131,10 +125,7 @@ if st.session_state['user_id'] is None:
             elif check_password(password_input, r['password_hash']):
                 st.session_state['user_id'] = r['id']
                 st.session_state['username'] = r['username']
-                st.session_state.pop("login_username", None)
-                st.session_state.pop("login_password", None)
-                st.session_state['login_rerun'] = True
-                st.stop()  # امن‌ترین rerun بدون خطا
+                st.experimental_rerun()
             else:
                 st.error(t("رمز عبور اشتباه است.", "Wrong password."))
 
