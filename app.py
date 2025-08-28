@@ -64,23 +64,24 @@ if 'user_id' not in st.session_state: st.session_state['user_id'] = None
 if 'username' not in st.session_state: st.session_state['username'] = None
 if 'lang' not in st.session_state: st.session_state['lang'] = 'فارسی'
 if 'demo_data' not in st.session_state: st.session_state['demo_data'] = []
+if 'lang_rerun_done' not in st.session_state: st.session_state['lang_rerun_done'] = False
 
 # ---------- Language ----------
 def t(fa, en):
     return en if st.session_state['lang'] == 'English' else fa
 
-# Sidebar language selection with safe rerun
+# Sidebar language selection
 with st.sidebar:
     lang_selection = st.selectbox("Language / زبان", ["فارسی", "English"],
                                   index=0 if st.session_state['lang'] == 'فارسی' else 1)
 
-if lang_selection != st.session_state['lang']:
+# Apply language change only if different and rerun not done yet
+if lang_selection != st.session_state['lang'] and not st.session_state['lang_rerun_done']:
     st.session_state['lang'] = lang_selection
-    if 'rerun_done' not in st.session_state:
-        st.session_state['rerun_done'] = True
-        st.experimental_rerun()
-    else:
-        st.session_state.pop('rerun_done')
+    st.session_state['lang_rerun_done'] = True
+    st.experimental_rerun()
+else:
+    st.session_state['lang_rerun_done'] = False
 
 text_class = 'rtl' if st.session_state['lang'] == 'فارسی' else 'ltr'
 
