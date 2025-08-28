@@ -1,4 +1,4 @@
-# sebetek_dashboard.py
+# sebetek_dashboard_pro.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -12,13 +12,13 @@ import os
 # ---------- Config ----------
 st.set_page_config(page_title="سیبتک 🍎 مدیریت نهال", page_icon="🍎", layout="wide")
 
-# ---------- CSS ----------
+# ---------- CSS حرفه‌ای ----------
 st.markdown("""
 <style>
 html, body, [class*="css"] { direction: rtl !important; text-align: right !important; font-family: 'Vazirmatn', sans-serif; background-color: #e6f2e6;}
-.stButton>button { cursor: pointer; background-color: #4CAF50; color: white; border-radius: 10px; padding: 8px 20px; font-weight: bold; margin-top:5px;}
+.stButton>button { cursor: pointer; background-color: #4CAF50; color: white; border-radius: 12px; padding: 10px 20px; font-weight: bold; margin-top:5px;}
 .stButton>button:hover { background-color: #45a049; }
-.card { background-color: #ffffff; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 15px; }
+.card { background-color: #ffffff; border-radius: 16px; padding: 20px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); margin-bottom: 20px; }
 .card h3 { margin: 0; font-size:18px;}
 .card .metric { font-size: 28px; font-weight: bold; }
 .card .icon { font-size: 28px; margin-left:10px; }
@@ -82,7 +82,7 @@ def check_password(password: str, hashed: str) -> bool:
 def app_header():
     st.markdown(f"""
     <div style='display:flex;align-items:center;margin-bottom:20px;'>
-        <img src='https://i.imgur.com/4Y2E2XQ.png' width='64' style='margin-left:12px;border-radius:12px;'>
+        <img src='https://i.imgur.com/4Y2E2XQ.png' width='64' style='margin-left:12px;border-radius:16px;'>
         <div>
             <h2 style='margin:0'>سیبتک</h2>
             <small style='color:#666'>مدیریت و پایش نهال</small>
@@ -187,16 +187,11 @@ else:
             st.markdown(f"<div class='card' style='border-left:6px solid {color};'><h3>نتیجه: {label}</h3><div>اعتماد: {conf}</div></div>",unsafe_allow_html=True)
             with engine.connect() as conn:
                 conn.execute(predictions_table.insert().values(user_id=user_id,file_name=getattr(uploaded,'name',str(datetime.now().timestamp())),result=label,confidence=conf,date=str(datetime.now())))
-            with engine.connect() as conn:
-                rows = conn.execute(sa.select(predictions_table).where(predictions_table.c.user_id==user_id).order_by(predictions_table.c.date.desc())).mappings().all()
-            if rows:
-                st.subheader("تاریخچه پیش‌بینی‌ها")
-                st.dataframe(pd.DataFrame(rows))
 
-    # ---------- ثبت بیماری ----------
+    # ---------- یادداشت ----------
     elif menu=="🍎 ثبت بیماری / یادداشت":
-        st.header("ثبت بیماری / یادداشت")
-        note = st.text_area("متن یادداشت")
+        st.header("ثبت یادداشت / بیماری")
+        note = st.text_area("شرح مشکل یا یادداشت")
         if st.button("ثبت یادداشت"):
             with engine.connect() as conn:
                 conn.execute(disease_table.insert().values(user_id=user_id,note=note,date=str(datetime.today())))
@@ -207,7 +202,7 @@ else:
             st.subheader("یادداشت‌های ثبت‌شده")
             st.dataframe(pd.DataFrame(rows))
 
-    # ---------- دانلود داده‌ها ----------
+    # ---------- دانلود ----------
     elif menu=="📥 دانلود داده‌ها":
         st.header("دانلود داده‌ها (CSV)")
         with engine.connect() as conn:
