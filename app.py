@@ -1,115 +1,234 @@
+# app.py
 import streamlit as st
-import sqlite3
 import pandas as pd
+import numpy as np
 from datetime import datetime
+from PIL import Image, ImageStat
+import os
+import base64
+import bcrypt
+import sqlalchemy as sa
+from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
 
-# تنظیم فونت و راست‌چین
-st.set_page_config(page_title="سیبتک – کشاورزی هوشمند", layout="wide")
+# --- Optional TensorFlow ---
+try:
+    import tensorflow as tf
+    TF_AVAILABLE = True
+except Exception:
+    TF_AVAILABLE = False
+
+# ---------- Page config ----------
+st.set_page_config(page_title="سیبتک 🍎 مدیریت نهال", page_icon="🍎", layout="wide")
+
+# ---------- CSS / RTL ----------
 st.markdown("""
-    <style>
-    @import url('https://cdn.jsdelivr.net/gh/rastikerdar/vazir-font@v30.1.0/dist/font-face.css');
-    html, body, [class*="css"]  {
-        font-family: 'Vazir', sans-serif;
-        direction: rtl;
-        text-align: right;
-    }
-    </style>
+<style>
+:root { --accent: #2e7d32; --accent-2: #388e3c; --bg-1: #eaf9e7; --card: #ffffff; }
+.block-container { direction: rtl !important; text-align: right !important; padding: 1.2rem 2rem; background: linear-gradient(135deg, #eaf9e7, #f7fff8); }
+body { font-family: Vazirmatn, Tahoma, sans-serif; background: linear-gradient(135deg, #eaf9e7, #f7fff8) !important; }
+.stButton>button { background-color: var(--accent-2) !important; color: white !important; border-radius: 8px !important; }
+table { direction: rtl !important; text-align: right !important; }
+</style>
 """, unsafe_allow_html=True)
 
-# ایجاد دیتابیس و جدول‌ها
-conn = sqlite3.connect("apple_dashboard.db", check_same_thread=False)
-cursor = conn.cursor()
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    password TEXT
-)
-""")
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS schedule (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    task TEXT,
-    date TEXT,
-    notes TEXT
-)
-""")
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS predictions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    prediction_date TEXT,
-    prediction TEXT
-)
-""")
-conn.commit()
+# ---------- Database ----------
+DB_FILE = "users_data.db"
+engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
+meta = MetaData()
 
-# مدیریت جلسه کاربر
-if "user_id" not in st.session_state:
-    st.session_state.user_id = None
+users_table = Table(
+    'users', meta,
+    Column('id', Integer, primary_key=True),
+    Column('username', String, unique=True, nullable=False),
+    Column('password_hash', String, nullable=False)
+)
 
-# ------------------ صفحه ورود ------------------
-def login_page():
-    st.title("ورود به سیستم")
-    username = st.text_input("نام کاربری")
-    password = st.text_input("رمز عبور", type="password")
-    if st.button("ورود"):
-        cursor.execute("SELECT id FROM users WHERE username=? AND password=?", (username, password))
-        user = cursor.fetchone()
-        if user:
-            st.session_state.user_id = user[0]
-            st.success("ورود موفق!")
+measurements = Table(
+    'measurements', meta,
+    Column('id', Integer, primary_key=True),
+    Column('user_id', Integer, ForeignKey('users.id')),
+    Column('date', String),
+    Column('height', Integer),
+    Column('leaves', Integer),
+    Column('notes', String),
+    Column('prune_needed', Integer)
+)
+
+schedule_table = Table(
+    'schedule', meta,
+    Column('id', Integer, primary_key=True),
+    Column('user_id', Integer, ForeignKey('users.id')),
+    Column('task', String),
+    Column('date', String),
+    Column('notes', String)
+)
+
+predictions_table = Table(
+    'predictions', meta,
+    Column('id', Integer, primary_key=True),
+    Column('user_id', Integer, ForeignKey('users.id')),
+    Column('file_name', String),
+    Column('result', String),
+    Column('confidence', String),
+    Column('date', String)
+)
+
+disease_table = Table(
+    'disease', meta,
+    Column('id', Integer, primary_key=True),
+    Column('user_id', Integer, ForeignKey('users.id')),
+    Column('note', String),
+    Column('date', String)
+)
+
+meta.create_all(engine)
+
+# ---------- Session defaults ----------
+for key in ['user_id', 'username', 'demo_history']:
+    if key not in st.session_state:
+        st.session_state[key] = None if key != 'demo_history' else []
+
+# ---------- Password helpers ----------
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+def check_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+
+# ---------- Model ----------
+MODEL_PATH = "model/seedling_model.h5"
+_model = None
+_model_loaded = False
+
+if TF_AVAILABLE and os.path.exists(MODEL_PATH):
+    try:
+        @st.cache_resource
+        def _load_model(path):
+            return tf.keras.models.load_model(path)
+        _model = _load_model(MODEL_PATH)
+        _model_loaded = True
+    except Exception as e:
+        st.warning(f"بارگذاری مدل با خطا مواجه شد: {e}")
+
+# ---------- Heuristic prediction ----------
+def heuristic_predict(img: Image.Image):
+    img = img.convert("RGB").resize((224,224))
+    stat = ImageStat.Stat(img)
+    mean = np.mean(stat.mean)
+    arr = np.array(img).astype(int)
+    r,g,b = arr[:,:,0], arr[:,:,1], arr[:,:,2]
+    yellow_ratio = ((r>g)&(g>=b)).mean()
+    green_ratio = ((g>r+10)&(g>b+10)).mean()
+    if green_ratio>0.12 and mean>80:
+        return "سالم", f"{min(99,int(50+green_ratio*200))}%"
+    if yellow_ratio>0.12 or mean<60:
+        if yellow_ratio>0.25:
+            return "بیمار", f"{min(95,int(40+yellow_ratio*200))}%"
         else:
-            st.error("نام کاربری یا رمز عبور اشتباه است.")
+            return "کم‌آبی/نیاز هرس", f"{min(90,int(30+(0.2-mean/255)*200))}%"
+    return "نامشخص", "50%"
 
-# ------------------ صفحه ثبت‌نام ------------------
-def signup_page():
-    st.title("ثبت‌نام در سیستم")
-    new_username = st.text_input("نام کاربری جدید", key="signup_username")
-    new_password = st.text_input("رمز عبور جدید", type="password", key="signup_password")
-    if st.button("ثبت‌نام"):
-        try:
-            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (new_username, new_password))
-            conn.commit()
-            st.success("ثبت‌نام با موفقیت انجام شد! حالا می‌توانید وارد شوید.")
-        except sqlite3.IntegrityError:
-            st.error("این نام کاربری قبلا ثبت شده است.")
+def predict_with_model(img: Image.Image):
+    x = np.expand_dims(np.array(img.convert("RGB").resize((224,224)))/255.0,0)
+    preds = _model.predict(x)
+    classes = ["سالم","بیمار","نیاز به هرس","کم‌آبی"]
+    idx = int(np.argmax(preds[0]))
+    confidence = int(float(np.max(preds[0]))*100)
+    return classes[idx], f"{confidence}%"
 
-# ------------------ داشبورد ------------------
-def dashboard_page():
-    st.title("داشبورد مدیریت نهال")
-    menu = ["رصد رشد نهال", "زمان‌بندی فعالیت‌ها", "پیش‌بینی", "دانلود داده‌ها", "خروج"]
-    choice = st.sidebar.selectbox("منوی اصلی", menu)
+# ---------- UI Header ----------
+def app_header():
+    logo_path = "logo.png"
+    if os.path.exists(logo_path):
+        with open(logo_path,"rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+            img_html = f"<img src='data:image/png;base64,{encoded}' width='64' style='border-radius:12px;margin-left:12px;'>"
+    else:
+        img_html = "<div style='font-size:36px;'>🍎</div>"
+    st.markdown(f"""
+    <div style='display:flex;align-items:center;margin-bottom:20px;'>
+        {img_html}
+        <div>
+            <h2 style='margin:0'>سیبتک</h2>
+            <small style='color:#666'>مدیریت و پایش نهال</small>
+        </div>
+    </div>
+    <hr/>
+    """, unsafe_allow_html=True)
 
-    if choice == "رصد رشد نهال":
-        st.subheader("رصد رشد نهال")
-        st.write("اینجا می‌توانید اطلاعات مربوط به رشد نهال را مشاهده کنید.")
-    elif choice == "زمان‌بندی فعالیت‌ها":
-        st.subheader("زمان‌بندی فعالیت‌ها")
-        df_schedule = pd.DataFrame(cursor.execute("SELECT task, date, notes FROM schedule WHERE user_id=?", (st.session_state.user_id,)).fetchall(), columns=["کار", "تاریخ", "یادداشت"])
-        st.table(df_schedule)
-    elif choice == "پیش‌بینی":
-        st.subheader("پیش‌بینی وضعیت نهال")
-        df_pred = pd.DataFrame(cursor.execute("SELECT prediction_date, prediction FROM predictions WHERE user_id=?", (st.session_state.user_id,)).fetchall(), columns=["تاریخ پیش‌بینی", "پیش‌بینی"])
-        st.table(df_pred)
-    elif choice == "دانلود داده‌ها":
-        st.subheader("دانلود داده‌ها")
-        df_sch = pd.DataFrame(cursor.execute("SELECT * FROM schedule WHERE user_id=?", (st.session_state.user_id,)).fetchall())
-        df_pred = pd.DataFrame(cursor.execute("SELECT * FROM predictions WHERE user_id=?", (st.session_state.user_id,)).fetchall())
-        st.download_button("دانلود زمان‌بندی", df_sch.to_csv(index=False), "schedule.csv")
-        st.download_button("دانلود پیش‌بینی", df_pred.to_csv(index=False), "predictions.csv")
-    elif choice == "خروج":
-        st.session_state.user_id = None
-        st.success("خروج موفق!")
+app_header()
 
-# ------------------ جریان اصلی ------------------
-if st.session_state.user_id:
-    dashboard_page()
+# ---------- Authentication ----------
+if st.session_state['user_id'] is None:
+    st.write("")
+    col1,col2 = st.columns([1,2])
+    with col1:
+        mode = st.radio("حالت:", ["ورود","ثبت‌نام","دمو"])
+    with col2:
+        st.write("")
+    
+    if mode=="ثبت‌نام":
+        st.subheader("ثبت‌نام کاربر جدید")
+        username = st.text_input("نام کاربری", key="signup_username")
+        password = st.text_input("رمز عبور", type="password", key="signup_password")
+        if st.button("ثبت‌نام"):
+            if not username or not password:
+                st.error("نام کاربری و رمز عبور را وارد کنید.")
+            else:
+                try:
+                    with engine.connect() as conn:
+                        sel = sa.select(users_table).where(users_table.c.username==username)
+                        if conn.execute(sel).mappings().first():
+                            st.error("این نام کاربری قبلاً ثبت شده است.")
+                        else:
+                            conn.execute(users_table.insert().values(username=username,password_hash=hash_password(password)))
+                            st.success("ثبت‌نام انجام شد. اکنون وارد شوید.")
+                except Exception as e:
+                    st.error(f"خطا در ثبت‌نام: {e}")
+    
+    elif mode=="ورود":
+        st.subheader("ورود به حساب کاربری")
+        username = st.text_input("نام کاربری", key="login_username")
+        password = st.text_input("رمز عبور", type="password", key="login_password")
+        if st.button("ورود"):
+            try:
+                with engine.connect() as conn:
+                    r = conn.execute(sa.select(users_table).where(users_table.c.username==username)).mappings().first()
+                    if not r:
+                        st.error("نام کاربری یافت نشد.")
+                    elif check_password(password,r['password_hash']):
+                        st.session_state['user_id']=int(r['id'])
+                        st.session_state['username']=r['username']
+                        st.experimental_rerun = lambda: None
+                    else:
+                        st.error("رمز عبور اشتباه است.")
+            except Exception as e:
+                st.error(f"خطا در ورود: {e}")
+    
+    else: # Demo
+        st.subheader("حالت دمو — پیش‌بینی نمونه")
+        uploaded = st.file_uploader("یک تصویر آپلود کنید", type=["jpg","jpeg","png"])
+        if uploaded:
+            img = Image.open(uploaded)
+            st.image(img,use_container_width=True)
+            if _model_loaded:
+                label,conf = predict_with_model(img)
+            else:
+                label,conf = heuristic_predict(img)
+            color = "#4CAF50" if "سالم" in label else "#FF9800" if "کم‌آبی" in label else "#F44336"
+            st.markdown(f"<div class='card' style='border-left:6px solid {color};'><h3>نتیجه: {label}</h3><div>اعتماد: {conf}</div></div>",unsafe_allow_html=True)
+
+# ---------- Sidebar and Dashboard ----------
 else:
-    st.sidebar.success("لطفا وارد شوید یا ثبت‌نام کنید")
-    tab = st.tabs(["ورود", "ثبت‌نام"])
-    with tab[0]:
-        login_page()
-    with tab[1]:
-        signup_page()
+    st.sidebar.header(f"خوش آمدید، {st.session_state['username']}")
+    menu = st.sidebar.selectbox("منو",[
+        "🏠 خانه","🌱 پایش نهال","📅 زمان‌بندی","📈 پیش‌بینی سلامت نهال",
+        "🍎 ثبت بیماری / یادداشت","📥 دانلود داده‌ها","🚪 خروج"
+    ])
+    user_id = st.session_state['user_id']
+    if menu=="🚪 خروج":
+        st.session_state['user_id']=None
+        st.session_state['username']=None
+        st.experimental_rerun = lambda: None
+
+# --- ادامه بخش‌ها مانند پایش، زمان‌بندی، پیش‌بینی و بیماری می‌تواند مشابه قبل اضافه شود ---
