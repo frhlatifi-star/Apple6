@@ -146,13 +146,25 @@ if st.session_state.user_id is None:
     st.stop()
 
 # ---------- Sidebar Menu ----------
-menu = st.sidebar.selectbox(f"خوش آمدید، {st.session_state.username}", [
-    "🏠 خانه",
-    "🌱 پایش نهال",
-    "📈 پیش‌بینی هرس",
-    "📥 دانلود داده‌ها",
-    "🚪 خروج"
-])
+tabs = st.tabs(["🏠 خانه", "🌱 پایش نهال", "📈 پیش‌بینی هرس", "📥 دانلود داده‌ها", "🚪 خروج"])
+
+with tabs[0]:
+    # خانه
+    ...
+with tabs[1]:
+    # پایش نهال
+    ...
+with tabs[2]:
+    # پیش‌بینی هرس
+    ...
+with tabs[3]:
+    # دانلود داده‌ها
+    ...
+with tabs[4]:
+    st.session_state.user_id = None
+    st.session_state.username = None
+    st.experimental_rerun()
+
 
 user_id = st.session_state.user_id
 
