@@ -4,6 +4,8 @@ from datetime import datetime
 import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
+from PIL import Image
+import io
 
 # ---------- Config ----------
 st.set_page_config(page_title="🍎 Seedling Pro", page_icon="🍎", layout="wide")
@@ -52,10 +54,9 @@ measurements = Table('measurements', meta,
                      Column('id', Integer, primary_key=True),
                      Column('user_id', Integer, ForeignKey('users.id')),
                      Column('date', String),
-                     Column('height', Integer),
-                     Column('leaves', Integer),
-                     Column('notes', String),
-                     Column('prune_needed', Integer))
+                     Column('image_name', String),
+                     Column('result', String),
+                     Column('notes', String))
 
 meta.create_all(engine)
 conn = engine.connect()
@@ -113,7 +114,6 @@ elif mode == "ورود":
         elif check_password(password_input, r['password_hash']):
             st.session_state['user_id'] = r['id']
             st.session_state['username'] = r['username']
-            st.success(f"خوش آمدید {r['username']}")
         else:
             st.error("رمز عبور اشتباه است.")
 
@@ -122,7 +122,8 @@ else:
     st.info("در حالت دمو داده ذخیره نمی‌شود.")
     f = st.file_uploader("آپلود تصویر برگ/میوه/ساقه", type=["jpg","jpeg","png"])
     if f:
-        st.image(f, use_container_width=True)
+        image = Image.open(f)
+        st.image(image, use_container_width=True)
         st.success("پیش‌بینی دمو: سالم")
         st.write("یادداشت: این نتیجه آزمایشی است.")
         st.session_state['demo_data'].append({'file': f.name, 'result': 'Healthy', 'time': datetime.now()})
@@ -130,3 +131,50 @@ else:
             st.subheader("تاریخچه دمو")
             df_demo = pd.DataFrame(st.session_state['demo_data'])
             st.dataframe(df_demo)
+
+# ---------- Main App after login ----------
+if st.session_state['user_id']:
+    st.sidebar.header(f"خوش آمدید {st.session_state['username']}")
+    menu = st.sidebar.selectbox("منو", ["🏠 خانه", "🌱 پایش", "📅 زمان‌بندی", "📈 پیش‌بینی", "🍎 بیماری", "📥 دانلود", "🚪 خروج"])
+    user_id = st.session_state['user_id']
+
+    if menu == "🚪 خروج":
+        st.session_state['user_id'] = None
+        st.session_state['username'] = None
+        st.success("خروج انجام شد.")
+
+    elif menu == "🏠 خانه":
+        st.markdown(f"<div class='{text_class}'><h2>صفحه اصلی</h2><p>به اپلیکیشن مدیریت نهال سیب خوش آمدید.</p></div>", unsafe_allow_html=True)
+
+    elif menu == "🌱 پایش":
+        st.markdown(f"<div class='{text_class}'><h2>پایش نهال</h2></div>", unsafe_allow_html=True)
+        with st.expander("➕ افزودن تصویر و ثبت اطلاعات"):
+            f = st.file_uploader("آپلود تصویر برگ/میوه/ساقه", type=["jpg","jpeg","png"], key="tracking_upload")
+            notes = st.text_area("یادداشت")
+            if st.button("ثبت اندازه‌گیری") and f:
+                image = Image.open(f)
+                # مثال پردازش تصویر: تشخیص سالم/ناسالم (اینجا فقط نمونه است)
+                result = 'Healthy'
+                conn.execute(measurements.insert().values(user_id=user_id, date=str(datetime.today()), image_name=f.name, result=result, notes=notes))
+                st.success("اندازه‌گیری ثبت شد.")
+        sel = sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.desc())
+        df = pd.DataFrame(conn.execute(sel).mappings().all())
+        if not df.empty:
+            st.dataframe(df)
+
+    elif menu == "📅 زمان‌بندی":
+        st.markdown(f"<div class='{text_class}'><h2>زمان‌بندی آبیاری و کوددهی</h2><p>اینجا می‌توانید زمان‌بندی‌ها را مشاهده کنید.</p></div>", unsafe_allow_html=True)
+
+    elif menu == "📈 پیش‌بینی":
+        st.markdown(f"<div class='{text_class}'><h2>پیش‌بینی رشد</h2><p>در آینده مدل پیشرفته پیش‌بینی رشد اضافه خواهد شد.</p></div>", unsafe_allow_html=True)
+
+    elif menu == "🍎 بیماری":
+        st.markdown(f"<div class='{text_class}'><h2>تشخیص بیماری</h2><p>در آینده مدل تشخیص بیماری اضافه خواهد شد.</p></div>", unsafe_allow_html=True)
+
+    elif menu == "📥 دانلود":
+        st.markdown(f"<div class='{text_class}'><h2>دانلود اطلاعات</h2><p>می‌توانید اطلاعات ثبت شده خود را دانلود کنید.</p></div>", unsafe_allow_html=True)
+        sel = sa.select(measurements).where(measurements.c.user_id==user_id)
+        df = pd.DataFrame(conn.execute(sel).mappings().all())
+        if not df.empty:
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button("دانلود CSV", data=csv, file_name='measurements.csv', mime='text/csv')
