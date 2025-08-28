@@ -4,6 +4,7 @@ from datetime import datetime
 import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
+from PIL import Image
 
 # ---------- Config ----------
 st.set_page_config(page_title="سیبتک 🍎 پایش نهال", page_icon="🍎", layout="wide")
@@ -27,6 +28,13 @@ measurements = Table('measurements', meta,
                      Column('notes', String),
                      Column('prune_needed', Integer))
 
+schedule_table = Table('schedule', meta,
+                       Column('id', Integer, primary_key=True),
+                       Column('user_id', Integer, ForeignKey('users.id')),
+                       Column('task', String),
+                       Column('date', String),
+                       Column('notes', String))
+
 meta.create_all(engine)
 conn = engine.connect()
 
@@ -35,6 +43,8 @@ if 'user_id' not in st.session_state:
     st.session_state['user_id'] = None
 if 'username' not in st.session_state:
     st.session_state['username'] = None
+if 'demo_data' not in st.session_state:
+    st.session_state['demo_data'] = []
 
 # ---------- Password helpers ----------
 def hash_password(password):
@@ -82,7 +92,6 @@ if st.session_state['user_id'] is None:
             if not r:
                 st.error("نام کاربری یافت نشد.")
             elif check_password(password, r['password_hash']):
-                # بروزرسانی session_state بدون استفاده از experimental_rerun
                 st.session_state['user_id'] = r['id']
                 st.session_state['username'] = r['username']
                 st.success(f"خوش آمدید، {r['username']}!")
@@ -97,6 +106,12 @@ if st.session_state['user_id'] is None:
             st.image(f, use_container_width=True)
             st.success("پیش‌بینی دمو: سالم")
             st.write("یادداشت: این نتیجه آزمایشی است.")
+            st.session_state['demo_data'].append({'file': f.name, 'result': 'سالم', 'time': datetime.now()})
+        if st.session_state['demo_data']:
+            st.subheader("تاریخچه دمو")
+            df_demo = pd.DataFrame(st.session_state['demo_data'])
+            st.dataframe(df_demo)
+
 else:
     # ---------- Logged-in Menu ----------
     st.sidebar.header(f"خوش آمدید، {st.session_state['username']}")
@@ -106,5 +121,70 @@ else:
     if menu == "🚪 خروج":
         st.session_state['user_id'] = None
         st.session_state['username'] = None
-        st.experimental_rerun = None  # حذف experimental_rerun
         st.info("شما از سیستم خارج شدید.")
+
+    # ---------- Home ----------
+    elif menu == "🏠 خانه":
+        st.header("خانه")
+        st.write("به سیبتک 🍎 پایش نهال خوش آمدید!")
+
+    # ---------- Tracking ----------
+    elif menu == "🌱 پایش":
+        st.header("پایش نهال")
+        with st.expander("➕ افزودن اندازه‌گیری"):
+            date = st.date_input("تاریخ", value=datetime.today())
+            height = st.number_input("ارتفاع (سانتی‌متر)", min_value=0, step=1)
+            leaves = st.number_input("تعداد برگ", min_value=0, step=1)
+            notes = st.text_area("یادداشت", placeholder="وضعیت آبیاری، کوددهی، علائم...")
+            prune = st.checkbox("نیاز به هرس؟")
+            if st.button("ثبت اندازه‌گیری"):
+                conn.execute(measurements.insert().values(user_id=user_id, date=str(date),
+                                                          height=height, leaves=leaves, notes=notes,
+                                                          prune_needed=int(prune)))
+                st.success("اندازه‌گیری ذخیره شد.")
+        sel = sa.select(measurements).where(measurements.c.user_id == user_id).order_by(measurements.c.date.desc())
+        df = pd.DataFrame(conn.execute(sel).mappings().all())
+        if not df.empty:
+            st.dataframe(df)
+
+    # ---------- Schedule ----------
+    elif menu == "📅 زمان‌بندی":
+        st.header("زمان‌بندی")
+        with st.expander("➕ افزودن برنامه"):
+            task = st.text_input("فعالیت")
+            date = st.date_input("تاریخ برنامه")
+            notes = st.text_area("یادداشت")
+            if st.button("ثبت برنامه"):
+                conn.execute(schedule_table.insert().values(user_id=user_id, task=task, date=str(date), notes=notes))
+                st.success("برنامه ثبت شد.")
+        sel = sa.select(schedule_table).where(schedule_table.c.user_id == user_id).order_by(schedule_table.c.date.desc())
+        df = pd.DataFrame(conn.execute(sel).mappings().all())
+        if not df.empty:
+            st.dataframe(df)
+
+    # ---------- Prediction ----------
+    elif menu == "📈 پیش‌بینی":
+        st.header("پیش‌بینی")
+        f = st.file_uploader("آپلود تصویر برگ/میوه/ساقه", type=["jpg","jpeg","png"])
+        if f:
+            st.image(f, use_container_width=True)
+            st.success("پیش‌بینی: سالم")
+            st.write("یادداشت: این نتیجه آزمایشی است.")
+
+    # ---------- Disease ----------
+    elif menu == "🍎 بیماری":
+        st.header("ثبت بیماری")
+        disease_note = st.text_area("علائم یا مشکل مشاهده شده")
+        if st.button("ثبت"):
+            st.success("یادداشت بیماری ثبت شد.")
+
+    # ---------- Download ----------
+    elif menu == "📥 دانلود":
+        st.header("دانلود داده‌ها")
+        sel = sa.select(measurements).where(measurements.c.user_id == user_id)
+        df = pd.DataFrame(conn.execute(sel).mappings().all())
+        if not df.empty:
+            csv = df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("دانلود CSV", csv, "measurements.csv", "text/csv")
+        else:
+            st.info("داده‌ای برای دانلود موجود نیست.")
