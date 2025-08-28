@@ -63,22 +63,20 @@ meta.create_all(engine)
 conn = engine.connect()
 
 # ---------- Session ----------
-if 'user_id' not in st.session_state: st.session_state['user_id'] = None
-if 'username' not in st.session_state: st.session_state['username'] = None
-if 'lang' not in st.session_state: st.session_state['lang'] = 'فارسی'
-if 'demo_data' not in st.session_state: st.session_state['demo_data'] = []
+for key, default in [('user_id', None), ('username', None), ('lang', 'فارسی'), ('demo_data', [])]:
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 # ---------- Language ----------
 def t(fa, en):
     return en if st.session_state['lang'] == 'English' else fa
 
-# Sidebar language selection
+# Handle language selection early
 with st.sidebar:
-    lang_selection = st.selectbox("Language / زبان", ["فارسی", "English"],
-                                  index=0 if st.session_state['lang'] == 'فارسی' else 1)
-
-if lang_selection != st.session_state['lang']:
-    st.session_state['lang'] = lang_selection
+    selected_lang = st.selectbox("Language / زبان", ["فارسی", "English"],
+                                 index=0 if st.session_state['lang'] == 'فارسی' else 1)
+if selected_lang != st.session_state['lang']:
+    st.session_state['lang'] = selected_lang
     st.experimental_rerun()
 
 text_class = 'rtl' if st.session_state['lang'] == 'فارسی' else 'ltr'
@@ -118,7 +116,7 @@ if st.session_state['user_id'] is None:
         username_input = st.text_input(t("نام کاربری", "Username"), key="login_username")
         password_input = st.text_input(t("رمز عبور", "Password"), type="password", key="login_password")
         if st.button(t("ورود", "Login")):
-            sel = sa.select(users_table).where(users_table.c.username == username_input)
+            sel = sa.select(users_table).where(users_table.c.username==username_input)
             r = conn.execute(sel).mappings().first()
             if not r:
                 st.error(t("نام کاربری یافت نشد.", "Username not found."))
