@@ -5,11 +5,9 @@ import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
 from PIL import Image
-import io
-import random  # برای پیش‌بینی آزمایشی
 
 # ---------- Config ----------
-st.set_page_config(page_title="سیبتک 🍎 مدیریت نهال", page_icon="🍎", layout="wide")
+st.set_page_config(page_title="سیبتک 🍎 Seedling Pro", page_icon="🍎", layout="wide")
 
 # ---------- Database ----------
 DB_FILE = "users_data.db"
@@ -40,15 +38,6 @@ schedule_table = Table('schedule', meta,
                        Column('date', String),
                        Column('notes', String))
 
-# Disease predictions
-predictions_table = Table('predictions', meta,
-                          Column('id', Integer, primary_key=True),
-                          Column('user_id', Integer, ForeignKey('users.id')),
-                          Column('file_name', String),
-                          Column('result', String),
-                          Column('notes', String),
-                          Column('date', String))
-
 meta.create_all(engine)
 conn = engine.connect()
 
@@ -56,6 +45,7 @@ conn = engine.connect()
 if 'user_id' not in st.session_state: st.session_state['user_id'] = None
 if 'username' not in st.session_state: st.session_state['username'] = None
 if 'demo_data' not in st.session_state: st.session_state['demo_data'] = []
+if 'login_success' not in st.session_state: st.session_state['login_success'] = False
 
 # ---------- Password helpers ----------
 def hash_password(password):
@@ -66,16 +56,17 @@ def check_password(password, hashed):
 
 # ---------- Login / SignUp ----------
 if st.session_state['user_id'] is None:
+    # نمایش لوگو و عنوان اپ
     st.markdown(
         """
-        <div style='display:flex; align-items:center; justify-content:center;'>
+        <div style='display:flex; align-items:center; direction:rtl;'>
             <img src='https://i.imgur.com/4Y2E2XQ.png' width='60' style='margin-left:15px;'/>
-            <h2 style='text-align:right;'>سیبتک 🍎 مدیریت نهال</h2>
+            <h2 style='margin:0;'>سیبتک 🍎 Seedling Pro</h2>
         </div>
         """, unsafe_allow_html=True
     )
 
-    mode = st.radio("حالت:", ["ورود", "ثبت‌نام", "دمو"])
+    mode = st.radio("حالت:", ["ورود", "ثبت‌نام", "دمو"], index=0, horizontal=True)
 
     if mode == "ثبت‌نام":
         st.subheader("ثبت‌نام")
@@ -106,7 +97,7 @@ if st.session_state['user_id'] is None:
             elif check_password(password, r['password_hash']):
                 st.session_state['user_id'] = r['id']
                 st.session_state['username'] = r['username']
-                st.experimental_rerun()
+                st.session_state['login_success'] = True
             else:
                 st.error("رمز عبور اشتباه است.")
 
@@ -118,14 +109,19 @@ if st.session_state['user_id'] is None:
             st.image(f, use_container_width=True)
             st.success("پیش‌بینی دمو: سالم")
             st.write("یادداشت: این نتیجه آزمایشی است.")
-            st.session_state['demo_data'].append({'file': f.name, 'result': 'سالم', 'time': datetime.now()})
+            st.session_state['demo_data'].append({'file': f.name, 'result': 'Healthy', 'time': datetime.now()})
             if st.session_state['demo_data']:
                 st.subheader("تاریخچه دمو")
                 df_demo = pd.DataFrame(st.session_state['demo_data'])
                 st.dataframe(df_demo)
 
-# ---------- After login ----------
+    # اجرای rerun فقط بعد از ورود موفق
+    if st.session_state.get('login_success'):
+        st.session_state['login_success'] = False
+        st.experimental_rerun()
+
 else:
+    # ---------- Logged-in Menu ----------
     st.sidebar.header(f"خوش آمدید، {st.session_state['username']}")
     menu = st.sidebar.selectbox("منو", ["🏠 خانه", "🌱 پایش", "📅 زمان‌بندی", "📈 پیش‌بینی", "🍎 بیماری", "📥 دانلود", "🚪 خروج"])
     user_id = st.session_state['user_id']
@@ -138,7 +134,7 @@ else:
     # ---------- Home ----------
     elif menu == "🏠 خانه":
         st.header("خانه")
-        st.write("به سیبتک 🍎 مدیریت نهال خوش آمدید!")
+        st.write("به سیبتک 🍎 Seedling Pro خوش آمدید!")
 
     # ---------- Tracking ----------
     elif menu == "🌱 پایش":
@@ -176,27 +172,12 @@ else:
 
     # ---------- Prediction ----------
     elif menu == "📈 پیش‌بینی":
-        st.header("پیش‌بینی بیماری نهال")
+        st.header("پیش‌بینی")
         f = st.file_uploader("آپلود تصویر برگ/میوه/ساقه", type=["jpg","jpeg","png"])
         if f:
             st.image(f, use_container_width=True)
-            # ------ پیش‌بینی آزمایشی ------
-            result = random.choice(["سالم", "بیمار"])
-            notes = ""
-            if result == "بیمار":
-                notes = "پیشنهاد: بررسی آبیاری، کوددهی و علائم قارچی."
-            st.success(f"نتیجه: {result}")
-            if notes:
-                st.warning(notes)
-            st.session_state['demo_data'].append({'file': f.name, 'result': result, 'time': datetime.now(), 'notes': notes})
-            # ذخیره در دیتابیس
-            conn.execute(predictions_table.insert().values(user_id=user_id, file_name=f.name, result=result,
-                                                          notes=notes, date=str(datetime.now())))
-            # نمایش تاریخچه
-            sel = sa.select(predictions_table).where(predictions_table.c.user_id==user_id).order_by(predictions_table.c.date.desc())
-            df_pred = pd.DataFrame(conn.execute(sel).mappings().all())
-            st.subheader("تاریخچه پیش‌بینی")
-            st.dataframe(df_pred)
+            st.success("پیش‌بینی: سالم")
+            st.write("یادداشت: این نتیجه آزمایشی است.")
 
     # ---------- Disease ----------
     elif menu == "🍎 بیماری":
