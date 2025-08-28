@@ -30,6 +30,13 @@ measurements = Table('measurements', meta,
                      Column('notes', String),
                      Column('prune_needed', Integer))
 
+schedule = Table('schedule', meta,
+                 Column('id', Integer, primary_key=True),
+                 Column('user_id', Integer, ForeignKey('users.id')),
+                 Column('task_date', String),
+                 Column('activity', String),
+                 Column('done', Integer))
+
 meta.create_all(engine)
 conn = engine.connect()
 
@@ -37,15 +44,16 @@ conn = engine.connect()
 if 'user_id' not in st.session_state: st.session_state['user_id'] = None
 if 'username' not in st.session_state: st.session_state['username'] = None
 if 'lang' not in st.session_state: st.session_state['lang'] = 'فارسی'
+if 'demo_data' not in st.session_state: st.session_state['demo_data'] = []
 
 # ---------- Language ----------
 def t(fa, en):
     return en if st.session_state['lang'] == 'English' else fa
 
-def change_lang():
+lang = st.sidebar.selectbox("Language / زبان", ["فارسی", "English"], index=0 if st.session_state.get('lang','فارسی')=='فارسی' else 1)
+if st.session_state['lang'] != lang:
+    st.session_state['lang'] = lang
     st.experimental_rerun()
-
-st.sidebar.selectbox("Language / زبان", ["فارسی", "English"], key='lang', on_change=change_lang)
 
 # ---------- Password helpers ----------
 def hash_password(password):
@@ -93,13 +101,19 @@ if st.session_state['user_id'] is None:
                 st.error(t("Wrong password.", "Wrong password."))
 
     else:
-        # Demo
+        # Demo Mode
         st.header(t("Demo Mode", "Demo Mode"))
         st.info(t("In demo mode, data is not saved.", "In demo mode, data is not saved."))
         f = st.file_uploader(t("Upload leaf/fruit/stem image", "Upload leaf/fruit/stem image"), type=["jpg","jpeg","png"])
         if f:
             st.image(f, use_container_width=True)
             st.success(t("Demo prediction: Healthy", "Demo prediction: Healthy"))
+            st.write(t("Notes: This is a demo result.", "Notes: This is a demo result."))
+            st.session_state['demo_data'].append({'file': f.name, 'result': 'Healthy', 'time': datetime.now()})
+            if st.session_state['demo_data']:
+                st.subheader(t("Demo History", "Demo History"))
+                df_demo = pd.DataFrame(st.session_state['demo_data'])
+                st.dataframe(df_demo)
 
 else:
     st.sidebar.header(f"{t('Welcome', 'Welcome')}, {st.session_state['username']}")
@@ -111,3 +125,20 @@ else:
         st.session_state['user_id'] = None
         st.session_state['username'] = None
         st.experimental_rerun()
+
+    # ---------- Tracking ----------
+    elif menu == t("🌱 Tracking", "🌱 Tracking"):
+        st.header(t("Seedling Tracking", "Seedling Tracking"))
+        with st.expander(t("➕ Add Measurement", "➕ Add Measurement")):
+            date = st.date_input(t("Date", "Date"), value=datetime.today())
+            height = st.number_input(t("Height (cm)", "Height (cm)"), min_value=0, step=1)
+            leaves = st.number_input(t("Leaves", "Leaves"), min_value=0, step=1)
+            notes = st.text_area(t("Notes", "Notes"))
+            prune = st.checkbox(t("Prune needed?", "Prune needed?"))
+            if st.button(t("Submit", "Submit")):
+                conn.execute(measurements.insert().values(user_id=user_id, date=str(date), height=height, leaves=leaves, notes=notes, prune_needed=int(prune)))
+                st.success(t("Measurement saved.", "Measurement saved."))
+        sel = sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.desc())
+        df = pd.DataFrame(conn.execute(sel).mappings().all())
+        if not df.empty:
+            st.dataframe(df)
