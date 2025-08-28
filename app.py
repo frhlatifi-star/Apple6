@@ -4,9 +4,12 @@ from datetime import datetime
 import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
+from PIL import Image
+import io
+import random
 
 # ---------- Config ----------
-st.set_page_config(page_title="🍎 Seedling Pro", page_icon="🍎", layout="wide")
+st.set_page_config(page_title="🍎 سیب نهال پرو", page_icon="🍎", layout="wide")
 
 # ---------- Database ----------
 DB_FILE = "users_data.db"
@@ -46,7 +49,10 @@ def check_password(password, hashed):
 def show_header():
     col1, col2 = st.columns([1,3])
     with col1:
-        st.image("logo.png", width=80)  # لوگوی خود را در مسیر پروژه قرار دهید
+        try:
+            st.image("logo.png", width=80)  # لوگوی خود را در مسیر پروژه قرار دهید
+        except:
+            st.write("🍎")
     with col2:
         st.markdown("<h1 style='text-align:right;'>سیب نهال پرو</h1>", unsafe_allow_html=True)
 
@@ -91,7 +97,7 @@ if st.session_state['user_id'] is None:
 else:
     # ---------- Main App after Login ----------
     st.sidebar.header(f"خوش آمدید، {st.session_state['username']}")
-    menu = st.sidebar.selectbox("منو", ["🏠 خانه", "🌱 پایش", "📅 زمان‌بندی", "📈 پیش‌بینی", "🍎 بیماری", "📥 دانلود", "🚪 خروج"])
+    menu = st.sidebar.selectbox("منو", ["🏠 خانه", "🌱 پایش", "📅 زمان‌بندی", "📈 پیش‌بینی", "🍎 بیماری", "📥 دانلود", "💻 دمو", "🚪 خروج"])
     
     if menu == "🚪 خروج":
         st.session_state['user_id'] = None
@@ -101,7 +107,7 @@ else:
     elif menu == "🏠 خانه":
         st.header("🏠 خانه")
         st.markdown("به اپلیکیشن سیب نهال پرو خوش آمدید.")
-    
+
     elif menu == "🌱 پایش":
         st.header("🌱 پایش نهال")
         with st.expander("➕ افزودن اندازه‌گیری"):
@@ -111,7 +117,7 @@ else:
             notes = st.text_area("یادداشت", placeholder="وضعیت آبیاری، کوددهی، علائم...")
             prune = st.checkbox("نیاز به هرس؟")
             f = st.file_uploader("آپلود تصویر نهال", type=["jpg","jpeg","png"])
-            if st.button("ثبت"):
+            if st.button("ثبت اندازه‌گیری"):
                 with engine.begin() as conn:
                     conn.execute(measurements.insert().values(
                         user_id=st.session_state['user_id'],
@@ -127,6 +133,23 @@ else:
         df = pd.DataFrame(engine.connect().execute(sel).mappings().all())
         if not df.empty:
             st.dataframe(df)
+
+    elif menu == "💻 دمو":
+        st.header("💻 دمو پیش‌بینی سلامت نهال")
+        f = st.file_uploader("آپلود تصویر برگ/میوه/ساقه", type=["jpg","jpeg","png"])
+        if f:
+            st.image(f, use_container_width=True)
+            # پیش‌بینی با پردازش تصویر ساده
+            image = Image.open(f)
+            # اینجا می‌توان مدل ML یا پردازش تصویر واقعی قرار داد
+            result = random.choice(["سالم", "بیمار"])  # نمونه ساده
+            st.success(f"پیش‌بینی: {result}")
+            st.session_state['demo_data'].append({'file': f.name, 'result': result, 'time': datetime.now()})
+        
+        if st.session_state['demo_data']:
+            st.subheader("تاریخچه دمو")
+            df_demo = pd.DataFrame(st.session_state['demo_data'])
+            st.dataframe(df_demo)
 
     else:
         st.header(menu)
