@@ -5,7 +5,6 @@ import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
 from PIL import Image
-import io
 
 # ---------- Config ----------
 st.set_page_config(page_title="🍎 Seedling Pro", page_icon="🍎", layout="wide")
@@ -81,56 +80,58 @@ except:
 
 st.markdown(f"<div class='{text_class}'><h1>سیستم مدیریت نهال سیب</h1></div>", unsafe_allow_html=True)
 
-# ---------- Auth ----------
-st.sidebar.header("احراز هویت")
-mode = st.sidebar.radio("حالت", ["ورود", "ثبت‌نام", "دمو"])
+# ---------- Authentication ----------
+if st.session_state['user_id'] is None:
+    st.sidebar.header("احراز هویت")
+    mode = st.sidebar.radio("حالت", ["ورود", "ثبت‌نام", "دمو"])
 
-if mode == "ثبت‌نام":
-    st.subheader("ثبت‌نام")
-    username_input = st.text_input("نام کاربری", key="signup_username")
-    password_input = st.text_input("رمز عبور", type="password", key="signup_password")
-    if st.button("ثبت"):
-        if not username_input or not password_input:
-            st.error("نام کاربری و رمز عبور را وارد کنید.")
-        else:
+    if mode == "ثبت‌نام":
+        st.subheader("ثبت‌نام")
+        username_input = st.text_input("نام کاربری", key="signup_username")
+        password_input = st.text_input("رمز عبور", type="password", key="signup_password")
+        if st.button("ثبت"):
+            if not username_input or not password_input:
+                st.error("نام کاربری و رمز عبور را وارد کنید.")
+            else:
+                sel = sa.select(users_table).where(users_table.c.username==username_input)
+                r = conn.execute(sel).mappings().first()
+                if r:
+                    st.error("نام کاربری وجود دارد.")
+                else:
+                    hashed = hash_password(password_input)
+                    conn.execute(users_table.insert().values(username=username_input, password_hash=hashed))
+                    st.success("ثبت شد. لطفا وارد شوید.")
+
+    elif mode == "ورود":
+        st.subheader("ورود")
+        username_input = st.text_input("نام کاربری", key="login_username")
+        password_input = st.text_input("رمز عبور", type="password", key="login_password")
+        if st.button("ورود"):
             sel = sa.select(users_table).where(users_table.c.username==username_input)
             r = conn.execute(sel).mappings().first()
-            if r:
-                st.error("نام کاربری وجود دارد.")
+            if not r:
+                st.error("نام کاربری یافت نشد.")
+            elif check_password(password_input, r['password_hash']):
+                st.session_state['user_id'] = r['id']
+                st.session_state['username'] = r['username']
+                st.success("ورود موفق")
             else:
-                hashed = hash_password(password_input)
-                conn.execute(users_table.insert().values(username=username_input, password_hash=hashed))
-                st.success("ثبت شد. لطفا وارد شوید.")
+                st.error("رمز عبور اشتباه است.")
 
-elif mode == "ورود":
-    st.subheader("ورود")
-    username_input = st.text_input("نام کاربری", key="login_username")
-    password_input = st.text_input("رمز عبور", type="password", key="login_password")
-    if st.button("ورود"):
-        sel = sa.select(users_table).where(users_table.c.username==username_input)
-        r = conn.execute(sel).mappings().first()
-        if not r:
-            st.error("نام کاربری یافت نشد.")
-        elif check_password(password_input, r['password_hash']):
-            st.session_state['user_id'] = r['id']
-            st.session_state['username'] = r['username']
-        else:
-            st.error("رمز عبور اشتباه است.")
-
-else:
-    st.subheader("حالت دمو")
-    st.info("در حالت دمو داده ذخیره نمی‌شود.")
-    f = st.file_uploader("آپلود تصویر برگ/میوه/ساقه", type=["jpg","jpeg","png"])
-    if f:
-        image = Image.open(f)
-        st.image(image, use_container_width=True)
-        st.success("پیش‌بینی دمو: سالم")
-        st.write("یادداشت: این نتیجه آزمایشی است.")
-        st.session_state['demo_data'].append({'file': f.name, 'result': 'Healthy', 'time': datetime.now()})
-        if st.session_state['demo_data']:
-            st.subheader("تاریخچه دمو")
-            df_demo = pd.DataFrame(st.session_state['demo_data'])
-            st.dataframe(df_demo)
+    else:
+        st.subheader("حالت دمو")
+        st.info("در حالت دمو داده ذخیره نمی‌شود.")
+        f = st.file_uploader("آپلود تصویر برگ/میوه/ساقه", type=["jpg","jpeg","png"])
+        if f:
+            image = Image.open(f)
+            st.image(image, use_container_width=True)
+            st.success("پیش‌بینی دمو: سالم")
+            st.write("یادداشت: این نتیجه آزمایشی است.")
+            st.session_state['demo_data'].append({'file': f.name, 'result': 'Healthy', 'time': datetime.now()})
+            if st.session_state['demo_data']:
+                st.subheader("تاریخچه دمو")
+                df_demo = pd.DataFrame(st.session_state['demo_data'])
+                st.dataframe(df_demo)
 
 # ---------- Main App after login ----------
 if st.session_state['user_id']:
@@ -153,8 +154,7 @@ if st.session_state['user_id']:
             notes = st.text_area("یادداشت")
             if st.button("ثبت اندازه‌گیری") and f:
                 image = Image.open(f)
-                # مثال پردازش تصویر: تشخیص سالم/ناسالم (اینجا فقط نمونه است)
-                result = 'Healthy'
+                result = 'Healthy'  # پایه پردازش تصویر
                 conn.execute(measurements.insert().values(user_id=user_id, date=str(datetime.today()), image_name=f.name, result=result, notes=notes))
                 st.success("اندازه‌گیری ثبت شد.")
         sel = sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.desc())
@@ -172,7 +172,7 @@ if st.session_state['user_id']:
         st.markdown(f"<div class='{text_class}'><h2>تشخیص بیماری</h2><p>در آینده مدل تشخیص بیماری اضافه خواهد شد.</p></div>", unsafe_allow_html=True)
 
     elif menu == "📥 دانلود":
-        st.markdown(f"<div class='{text_class}'><h2>دانلود اطلاعات</h2><p>می‌توانید اطلاعات ثبت شده خود را دانلود کنید.</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='{text_class}'><h2>دانلود اطلاعات</h2></div>", unsafe_allow_html=True)
         sel = sa.select(measurements).where(measurements.c.user_id==user_id)
         df = pd.DataFrame(conn.execute(sel).mappings().all())
         if not df.empty:
