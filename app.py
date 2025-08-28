@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
-import matplotlib.pyplot as plt
 import altair as alt
 
 # ---------- Config ----------
