@@ -1,12 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import bcrypt
-import sqlalchemy as sa
-from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
-from PIL import Image, ImageStat
-import numpy as np
-import io, os, base64
+import base64, os
 
 # ---------- Config ----------
 st.set_page_config(page_title="سیبتک 🍎 مدیریت نهال", page_icon="🍎", layout="wide")
@@ -18,12 +13,19 @@ def local_css():
     body {
         background: linear-gradient(135deg, #d9fdd3, #f0fff0) !important;
         font-family: "Vazirmatn", Tahoma, sans-serif;
+        direction: rtl !important;
+        text-align: right !important;
+    }
+    .block-container {
+        direction: rtl !important;
+        text-align: right !important;
     }
     .app-header {
         display: flex;
         align-items: center;
         justify-content: flex-start;
         margin-bottom: 1rem;
+        direction: rtl !important;
     }
     .app-header h2 {
         margin: 0;
@@ -38,6 +40,7 @@ def local_css():
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 1rem;
         margin-top: 1rem;
+        direction: rtl !important;
     }
     .card {
         background: white;
@@ -74,7 +77,7 @@ local_css()
 
 # ---------- Logo & Header ----------
 def app_header():
-    logo_path = "logo.png"  # حتما لوگو کنار app.py ذخیره شده باشد
+    logo_path = "logo.png"  # لوگو کنار app.py ذخیره شود
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
             encoded_logo = base64.b64encode(f.read()).decode()
@@ -98,11 +101,11 @@ def app_header():
 
 app_header()
 
-# ---------- Auth State ----------
+# ---------- State ----------
 if "page" not in st.session_state:
     st.session_state.page = "dashboard"
-if "user" not in st.session_state:
-    st.session_state.user = None
+if "tracking_data" not in st.session_state:
+    st.session_state.tracking_data = pd.DataFrame(columns=["تاریخ", "ارتفاع (cm)", "یادداشت"])
 
 # ---------- Dashboard ----------
 def dashboard():
@@ -133,43 +136,61 @@ def dashboard():
             <div class="card-icon">📥</div>
             <div>دانلود داده‌ها</div>
         </div>
-        <div class="card" onclick="window.parent.postMessage({type: 'streamlit:setComponentValue', key: 'page', value: 'logout'}, '*')">
-            <div class="card-icon">🚪</div>
-            <div>خروج</div>
-        </div>
     </div>
     """, unsafe_allow_html=True)
 
-# ---------- Page Routing ----------
+# ---------- Pages ----------
+def home():
+    st.header("🏠 خانه")
+    st.info("📊 اینجا خلاصه وضعیت نهال‌ها نمایش داده می‌شود.")
+
+def tracking():
+    st.header("🌱 پایش نهال")
+
+    st.subheader("➕ ثبت داده جدید")
+    with st.form("tracking_form", clear_on_submit=True):
+        height = st.number_input("ارتفاع نهال (سانتی‌متر)", min_value=0, step=1)
+        note = st.text_area("یادداشت (اختیاری)")
+        submitted = st.form_submit_button("ثبت")
+
+        if submitted:
+            new_row = {
+                "تاریخ": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "ارتفاع (cm)": height,
+                "یادداشت": note
+            }
+            st.session_state.tracking_data = pd.concat(
+                [st.session_state.tracking_data, pd.DataFrame([new_row])],
+                ignore_index=True
+            )
+            st.success("✅ داده با موفقیت ثبت شد.")
+
+    st.subheader("📋 تاریخچه پایش")
+    if not st.session_state.tracking_data.empty:
+        st.dataframe(st.session_state.tracking_data, use_container_width=True)
+    else:
+        st.warning("هنوز داده‌ای ثبت نشده است.")
+
+# ---------- Router ----------
 if st.session_state.page == "dashboard":
     dashboard()
 elif st.session_state.page == "home":
-    st.header("خانه")
-    st.write("📊 اینجا خلاصه وضعیت نهال‌ها نمایش داده می‌شود.")
-    if st.button("بازگشت به داشبورد"):
-        st.session_state.page = "dashboard"
+    home()
 elif st.session_state.page == "tracking":
-    st.header("🌱 پایش نهال")
-    st.write("اینجا می‌توانید رشد و وضعیت نهال‌ها را ثبت کنید.")
-    if st.button("بازگشت به داشبورد"):
-        st.session_state.page = "dashboard"
+    tracking()
 elif st.session_state.page == "schedule":
     st.header("📅 زمان‌بندی فعالیت‌ها")
-    if st.button("بازگشت به داشبورد"):
-        st.session_state.page = "dashboard"
 elif st.session_state.page == "predict":
     st.header("📈 پیش‌بینی سلامت نهال (آپلود تصویر)")
-    if st.button("بازگشت به داشبورد"):
-        st.session_state.page = "dashboard"
 elif st.session_state.page == "disease":
     st.header("🍎 ثبت بیماری / یادداشت")
-    if st.button("بازگشت به داشبورد"):
-        st.session_state.page = "dashboard"
 elif st.session_state.page == "download":
     st.header("📥 دانلود داده‌ها (CSV)")
-    if st.button("بازگشت به داشبورد"):
-        st.session_state.page = "dashboard"
-elif st.session_state.page == "logout":
-    st.success("✅ شما خارج شدید.")
-    if st.button("بازگشت به داشبورد"):
-        st.session_state.page = "dashboard"
+    if st.button("📥 دانلود فایل"):
+        st.download_button(
+            "دانلود CSV",
+            st.session_state.tracking_data.to_csv(index=False).encode("utf-8"),
+            "tracking.csv",
+            "text/csv",
+            key="download-csv"
+        )
