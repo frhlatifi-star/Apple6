@@ -19,10 +19,6 @@ body {
     direction: rtl;
     text-align: right;
 }
-.ltr {
-    direction: ltr;
-    text-align: left;
-}
 .section-card {
     background-color: #ffffff;
     border-radius: 15px;
@@ -63,23 +59,11 @@ meta.create_all(engine)
 conn = engine.connect()
 
 # ---------- Session ----------
-for key, default in [('user_id', None), ('username', None), ('lang', 'فارسی'), ('demo_data', [])]:
+for key, default in [('user_id', None), ('username', None), ('demo_data', [])]:
     if key not in st.session_state:
         st.session_state[key] = default
 
-# ---------- Language ----------
-def t(fa, en):
-    return en if st.session_state['lang'] == 'English' else fa
-
-# Handle language selection early
-with st.sidebar:
-    selected_lang = st.selectbox("Language / زبان", ["فارسی", "English"],
-                                 index=0 if st.session_state['lang'] == 'فارسی' else 1)
-if selected_lang != st.session_state['lang']:
-    st.session_state['lang'] = selected_lang
-    st.experimental_rerun()
-
-text_class = 'rtl' if st.session_state['lang'] == 'فارسی' else 'ltr'
+text_class = 'rtl'
 
 # ---------- Password helpers ----------
 def hash_password(password):
@@ -89,54 +73,53 @@ def check_password(password, hashed):
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 # ---------- Auth ----------
-if st.session_state['user_id'] is None:
-    st.markdown(f"<div class='{text_class}'><img src='logo.png' class='logo'><h1>{t('سیستم مدیریت نهال سیب', 'Seedling Pro')}</h1></div>", unsafe_allow_html=True)
-    st.sidebar.header(t("احراز هویت", "Authentication"))
-    mode = st.sidebar.radio(t("حالت", "Mode"), [t("ورود", "Login"), t("ثبت‌نام", "Sign Up"), t("دمو", "Demo")])
+st.markdown(f"<div class='{text_class}'><img src='logo.png' class='logo'><h1>سیستم مدیریت نهال سیب</h1></div>", unsafe_allow_html=True)
+st.sidebar.header("احراز هویت")
+mode = st.sidebar.radio("حالت", ["ورود", "ثبت‌نام", "دمو"])
 
-    if mode == t("ثبت‌نام", "Sign Up"):
-        st.subheader(t("ثبت‌نام", "Sign Up"))
-        username_input = st.text_input(t("نام کاربری", "Username"), key="signup_username")
-        password_input = st.text_input(t("رمز عبور", "Password"), type="password", key="signup_password")
-        if st.button(t("ثبت", "Register")):
-            if not username_input or not password_input:
-                st.error(t("نام کاربری و رمز عبور را وارد کنید.", "Provide username & password."))
-            else:
-                sel = sa.select(users_table).where(users_table.c.username==username_input)
-                r = conn.execute(sel).mappings().first()
-                if r:
-                    st.error(t("نام کاربری وجود دارد.", "Username already exists."))
-                else:
-                    hashed = hash_password(password_input)
-                    conn.execute(users_table.insert().values(username=username_input, password_hash=hashed))
-                    st.success(t("ثبت شد. لطفا وارد شوید.", "Registered. Please login."))
-
-    elif mode == t("ورود", "Login"):
-        st.subheader(t("ورود", "Login"))
-        username_input = st.text_input(t("نام کاربری", "Username"), key="login_username")
-        password_input = st.text_input(t("رمز عبور", "Password"), type="password", key="login_password")
-        if st.button(t("ورود", "Login")):
+if mode == "ثبت‌نام":
+    st.subheader("ثبت‌نام")
+    username_input = st.text_input("نام کاربری", key="signup_username")
+    password_input = st.text_input("رمز عبور", type="password", key="signup_password")
+    if st.button("ثبت"):
+        if not username_input or not password_input:
+            st.error("نام کاربری و رمز عبور را وارد کنید.")
+        else:
             sel = sa.select(users_table).where(users_table.c.username==username_input)
             r = conn.execute(sel).mappings().first()
-            if not r:
-                st.error(t("نام کاربری یافت نشد.", "Username not found."))
-            elif check_password(password_input, r['password_hash']):
-                st.session_state['user_id'] = r['id']
-                st.session_state['username'] = r['username']
-                st.experimental_rerun()
+            if r:
+                st.error("نام کاربری وجود دارد.")
             else:
-                st.error(t("رمز عبور اشتباه است.", "Wrong password."))
+                hashed = hash_password(password_input)
+                conn.execute(users_table.insert().values(username=username_input, password_hash=hashed))
+                st.success("ثبت شد. لطفا وارد شوید.")
 
-    else:
-        st.subheader(t("حالت دمو", "Demo Mode"))
-        st.info(t("در حالت دمو داده ذخیره نمی‌شود.", "In demo mode, data is not saved."))
-        f = st.file_uploader(t("آپلود تصویر برگ/میوه/ساقه", "Upload leaf/fruit/stem image"), type=["jpg","jpeg","png"])
-        if f:
-            st.image(f, use_container_width=True)
-            st.success(t("پیش‌بینی دمو: سالم", "Demo prediction: Healthy"))
-            st.write(t("یادداشت: این نتیجه آزمایشی است.", "Notes: This is a demo result."))
-            st.session_state['demo_data'].append({'file': f.name, 'result': 'Healthy', 'time': datetime.now()})
-            if st.session_state['demo_data']:
-                st.subheader(t("تاریخچه دمو", "Demo History"))
-                df_demo = pd.DataFrame(st.session_state['demo_data'])
-                st.dataframe(df_demo)
+elif mode == "ورود":
+    st.subheader("ورود")
+    username_input = st.text_input("نام کاربری", key="login_username")
+    password_input = st.text_input("رمز عبور", type="password", key="login_password")
+    if st.button("ورود"):
+        sel = sa.select(users_table).where(users_table.c.username==username_input)
+        r = conn.execute(sel).mappings().first()
+        if not r:
+            st.error("نام کاربری یافت نشد.")
+        elif check_password(password_input, r['password_hash']):
+            st.session_state['user_id'] = r['id']
+            st.session_state['username'] = r['username']
+            st.experimental_rerun()
+        else:
+            st.error("رمز عبور اشتباه است.")
+
+else:
+    st.subheader("حالت دمو")
+    st.info("در حالت دمو داده ذخیره نمی‌شود.")
+    f = st.file_uploader("آپلود تصویر برگ/میوه/ساقه", type=["jpg","jpeg","png"])
+    if f:
+        st.image(f, use_container_width=True)
+        st.success("پیش‌بینی دمو: سالم")
+        st.write("یادداشت: این نتیجه آزمایشی است.")
+        st.session_state['demo_data'].append({'file': f.name, 'result': 'Healthy', 'time': datetime.now()})
+        if st.session_state['demo_data']:
+            st.subheader("تاریخچه دمو")
+            df_demo = pd.DataFrame(st.session_state['demo_data'])
+            st.dataframe(df_demo)
