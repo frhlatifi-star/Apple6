@@ -1,12 +1,34 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
+import matplotlib.pyplot as plt
+import altair as alt
 
 # ---------- Config ----------
 st.set_page_config(page_title="🍎 Seedling Pro", page_icon="🍎", layout="wide")
+
+# ---------- Custom CSS for UI ----------
+st.markdown("""
+<style>
+body {
+    background: linear-gradient(to right, #e0f7fa, #ffffff);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+.section-card {
+    background-color: #ffffff;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+h1, h2, h3 {
+    color: #00796b;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ---------- Database ----------
 DB_FILE = "users_data.db"
@@ -26,6 +48,12 @@ measurements = Table('measurements', meta,
                      Column('leaves', Integer),
                      Column('notes', String),
                      Column('prune_needed', Integer))
+
+schedule_table = Table('schedule', meta,
+                       Column('id', Integer, primary_key=True),
+                       Column('user_id', Integer, ForeignKey('users.id')),
+                       Column('task', String),
+                       Column('date', String))
 
 meta.create_all(engine)
 conn = engine.connect()
@@ -118,8 +146,28 @@ else:
         st.session_state['username'] = None
         st.rerun()
 
+    # ---------- Home ----------
+    elif menu == t("🏠 خانه", "🏠 Home"):
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        st.header(t("داشبورد", "Dashboard"))
+        sel = sa.select(measurements).where(measurements.c.user_id==user_id)
+        df = pd.DataFrame(conn.execute(sel).mappings().all())
+        if not df.empty:
+            st.metric(t("تعداد اندازه‌گیری‌ها", "Measurements"), len(df))
+            st.metric(t("میانگین ارتفاع", "Avg Height"), round(df['height'].mean(),1))
+            chart = alt.Chart(df).mark_line(point=True).encode(
+                x='date:T',
+                y='height:Q',
+                tooltip=['date','height']
+            ).properties(width=700, height=300)
+            st.altair_chart(chart, use_container_width=True)
+        else:
+            st.info(t("هیچ داده‌ای ثبت نشده است.", "No data yet."))
+        st.markdown('</div>', unsafe_allow_html=True)
+
     # ---------- Tracking ----------
     elif menu == t("🌱 پایش", "🌱 Tracking"):
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.header(t("پایش نهال", "Seedling Tracking"))
         with st.expander(t("➕ افزودن اندازه‌گیری", "➕ Add Measurement")):
             date = st.date_input(t("تاریخ", "Date"), value=datetime.today())
@@ -135,3 +183,4 @@ else:
         df = pd.DataFrame(conn.execute(sel).mappings().all())
         if not df.empty:
             st.dataframe(df)
+        st.markdown('</div>', unsafe_allow_html=True)
