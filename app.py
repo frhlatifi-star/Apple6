@@ -65,6 +65,7 @@ if 'username' not in st.session_state: st.session_state['username'] = None
 if 'lang' not in st.session_state: st.session_state['lang'] = 'فارسی'
 if 'demo_data' not in st.session_state: st.session_state['demo_data'] = []
 if 'lang_rerun_done' not in st.session_state: st.session_state['lang_rerun_done'] = False
+if 'login_rerun_done' not in st.session_state: st.session_state['login_rerun_done'] = False
 
 # ---------- Language ----------
 def t(fa, en):
@@ -75,7 +76,6 @@ with st.sidebar:
     lang_selection = st.selectbox("Language / زبان", ["فارسی", "English"],
                                   index=0 if st.session_state['lang'] == 'فارسی' else 1)
 
-# Apply language change only if different and rerun not done yet
 if lang_selection != st.session_state['lang'] and not st.session_state['lang_rerun_done']:
     st.session_state['lang'] = lang_selection
     st.session_state['lang_rerun_done'] = True
@@ -99,34 +99,41 @@ if st.session_state['user_id'] is None:
 
     if mode == t("ثبت‌نام", "Sign Up"):
         st.header(t("ثبت‌نام", "Sign Up"))
-        username = st.text_input(t("نام کاربری", "Username"))
-        password = st.text_input(t("رمز عبور", "Password"), type="password")
+        username_input = st.text_input(t("نام کاربری", "Username"), key="signup_username")
+        password_input = st.text_input(t("رمز عبور", "Password"), type="password", key="signup_password")
         if st.button(t("ثبت", "Register")):
-            if not username or not password:
+            if not username_input or not password_input:
                 st.error(t("نام کاربری و رمز عبور را وارد کنید.", "Provide username & password."))
             else:
-                sel = sa.select(users_table).where(users_table.c.username==username)
+                sel = sa.select(users_table).where(users_table.c.username==username_input)
                 r = conn.execute(sel).mappings().first()
                 if r:
                     st.error(t("نام کاربری وجود دارد.", "Username already exists."))
                 else:
-                    hashed = hash_password(password)
-                    conn.execute(users_table.insert().values(username=username, password_hash=hashed))
+                    hashed = hash_password(password_input)
+                    conn.execute(users_table.insert().values(username=username_input, password_hash=hashed))
                     st.success(t("ثبت شد. لطفا وارد شوید.", "Registered. Please login."))
 
     elif mode == t("ورود", "Login"):
         st.header(t("ورود", "Login"))
-        username = st.text_input(t("نام کاربری", "Username"))
-        password = st.text_input(t("رمز عبور", "Password"), type="password")
+        username_input = st.text_input(t("نام کاربری", "Username"), key="login_username")
+        password_input = st.text_input(t("رمز عبور", "Password"), type="password", key="login_password")
         if st.button(t("ورود", "Login")):
-            sel = sa.select(users_table).where(users_table.c.username==username)
+            sel = sa.select(users_table).where(users_table.c.username==username_input)
             r = conn.execute(sel).mappings().first()
             if not r:
                 st.error(t("نام کاربری یافت نشد.", "Username not found."))
-            elif check_password(password, r['password_hash']):
+            elif check_password(password_input, r['password_hash']):
                 st.session_state['user_id'] = r['id']
                 st.session_state['username'] = r['username']
-                st.experimental_rerun()
+                # پاکسازی ورودی‌ها قبل از rerun
+                st.session_state.pop("login_username", None)
+                st.session_state.pop("login_password", None)
+                if not st.session_state['login_rerun_done']:
+                    st.session_state['login_rerun_done'] = True
+                    st.experimental_rerun()
+                else:
+                    st.session_state['login_rerun_done'] = False
             else:
                 st.error(t("رمز عبور اشتباه است.", "Wrong password."))
 
