@@ -1,15 +1,22 @@
 import streamlit as st
 import sqlite3
+import pandas as pd
+from datetime import datetime
 import os
-from datetime import datetime, timedelta
 
-# ----------- تنظیم دیتابیس ----------------
+# ==========================
+# فایل دیتابیس
 DB_FILE = "app_data.db"
 
+# پاک کردن دیتابیس قبلی (برای تست)
+# if os.path.exists(DB_FILE):
+#     os.remove(DB_FILE)
+
+# ==========================
+# ساخت دیتابیس و جدول‌ها
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    # جدول کاربران
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17,7 +24,6 @@ def init_db():
             password TEXT NOT NULL
         )
     """)
-    # جدول زمانبندی
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS schedule (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,7 +34,6 @@ def init_db():
             FOREIGN KEY(user_id) REFERENCES users(id)
         )
     """)
-    # جدول پیش‌بینی نیاز آب و کود
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS predictions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,20 +49,37 @@ def init_db():
 
 init_db()
 
-# ----------- تنظیم راست‌چین و فونت فارسی ----------------
+# ==========================
+# استایل راست‌چین و فونت فارسی
 st.set_page_config(page_title="سیبتک – کشاورزی هوشمند", layout="wide")
 st.markdown("""
-    <style>
-    body {direction: rtl; font-family: Vazir, Arial; }
-    .stButton>button {width: 100%;}
-    </style>
+<style>
+body { direction: rtl; font-family: Vazir, sans-serif; }
+h1, h2, h3, h4, h5, h6 { font-family: Vazir, sans-serif; }
+</style>
 """, unsafe_allow_html=True)
 
-# ----------- مدیریت سشن استیت ----------------
-if 'user_id' not in st.session_state:
-    st.session_state['user_id'] = None
+# ==========================
+# لوگوی اپ
+st.image("logo.png", width=150)  # لوگوی سیب خود را اینجا بگذارید
 
-# ----------- صفحه ورود و ثبت‌نام ----------------
+# ==========================
+# توابع ورود و ثبت‌نام
+def signup_page():
+    st.subheader("ثبت‌نام کاربر جدید")
+    new_username = st.text_input("نام کاربری")
+    new_password = st.text_input("رمز عبور", type="password")
+    if st.button("ثبت‌نام"):
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (new_username, new_password))
+            conn.commit()
+            st.success("ثبت‌نام با موفقیت انجام شد!")
+        except sqlite3.IntegrityError:
+            st.error("این نام کاربری قبلاً ثبت شده است!")
+        conn.close()
+
 def login_page():
     st.subheader("ورود کاربر")
     username = st.text_input("نام کاربری")
@@ -72,58 +94,13 @@ def login_page():
             st.session_state['user_id'] = user[0]
             st.success("ورود موفق!")
         else:
-            st.error("نام کاربری یا رمز عبور اشتباه است.")
+            st.error("نام کاربری یا رمز عبور اشتباه است!")
 
-def signup_page():
-    st.subheader("ثبت نام کاربر جدید")
-    username = st.text_input("نام کاربری جدید")
-    password = st.text_input("رمز عبور جدید", type="password")
-    if st.button("ثبت نام"):
-        try:
-            conn = sqlite3.connect(DB_FILE)
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
-            conn.commit()
-            conn.close()
-            st.success("ثبت نام موفق! حالا می‌توانید وارد شوید.")
-        except sqlite3.IntegrityError:
-            st.error("این نام کاربری قبلاً ثبت شده است.")
-
-# ----------- صفحه اصلی ----------------
-def page_home():
-    st.title("سیبتک – داشبورد مدیریت نهال")
-    st.image("logo.png", width=200)
-    
-    user_id = st.session_state['user_id']
-    if not user_id:
-        st.warning("لطفاً ابتدا وارد شوید.")
-        return
-
-    st.subheader("پیش‌بینی نیاز آب و کود")
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    today = datetime.today().strftime("%Y-%m-%d")
-    
-    # بررسی پیش‌بینی امروز، اگر نیست ایجاد می‌کنیم
-    cursor.execute("SELECT * FROM predictions WHERE user_id=? AND prediction_date=?", (user_id, today))
-    prediction = cursor.fetchone()
-    if not prediction:
-        water_needed = 50  # می‌توان با الگوریتم واقعی جایگزین شود
-        fertilize_needed = 20
-        cursor.execute("INSERT INTO predictions (user_id, prediction_date, water_needed, fertilize_needed) VALUES (?, ?, ?, ?)",
-                       (user_id, today, water_needed, fertilize_needed))
-        conn.commit()
-        prediction = (None, user_id, today, water_needed, fertilize_needed)
-    conn.close()
-    
-    st.write(f"تاریخ: {prediction[2]}")
-    st.write(f"میزان آب مورد نیاز: {prediction[3]} لیتر")
-    st.write(f"میزان کود مورد نیاز: {prediction[4]} واحد")
-
-# ----------- صفحه زمانبندی ----------------
+# ==========================
+# بخش زمان‌بندی
 def page_schedule():
-    st.subheader("زمانبندی فعالیت‌ها")
-    user_id = st.session_state['user_id']
+    st.subheader("برنامه‌های زمان‌بندی شده")
+    user_id = st.session_state.get('user_id')
     if not user_id:
         st.warning("لطفاً ابتدا وارد شوید.")
         return
@@ -131,32 +108,51 @@ def page_schedule():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    # اضافه کردن تسک جدید
-    with st.form("add_task_form"):
-        task = st.text_input("فعالیت")
+    # نمایش برنامه‌ها
+    df = pd.read_sql_query("SELECT * FROM schedule WHERE user_id=? ORDER BY date DESC", conn, params=(user_id,))
+    st.dataframe(df)
+
+    # افزودن برنامه جدید
+    with st.form("new_task_form"):
+        task = st.text_input("کار جدید")
         date = st.date_input("تاریخ")
-        notes = st.text_area("یادداشت")
+        notes = st.text_area("توضیحات")
         submitted = st.form_submit_button("افزودن")
-        if submitted and task:
+        if submitted:
             cursor.execute("INSERT INTO schedule (user_id, task, date, notes) VALUES (?, ?, ?, ?)",
-                           (user_id, task, date.strftime("%Y-%m-%d"), notes))
+                           (user_id, task, str(date), notes))
             conn.commit()
-            st.success("فعالیت اضافه شد!")
+            st.success("برنامه جدید اضافه شد!")
 
-    # نمایش تسک‌ها
-    cursor.execute("SELECT id, task, date, notes FROM schedule WHERE user_id=? ORDER BY date DESC", (user_id,))
-    tasks = cursor.fetchall()
     conn.close()
-    
-    if tasks:
-        for t in tasks:
-            st.markdown(f"**{t[1]}** – {t[2]} – {t[3]}")
-    else:
-        st.info("هیچ فعالیتی ثبت نشده است.")
 
-# ----------- منو ----------------
-menu = ["ورود / ثبت‌نام", "داشبورد", "زمانبندی"]
-menu_choice = st.sidebar.selectbox("منو", menu)
+# ==========================
+# بخش پیش‌بینی
+def page_prediction():
+    st.subheader("پیش‌بینی نیاز آب و کود")
+    user_id = st.session_state.get('user_id')
+    if not user_id:
+        st.warning("لطفاً ابتدا وارد شوید.")
+        return
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    today = datetime.today().date()
+    # یک پیش‌بینی نمونه
+    cursor.execute("INSERT INTO predictions (user_id, prediction_date, water_needed, fertilize_needed) VALUES (?, ?, ?, ?)",
+                   (user_id, str(today), 10, 5))
+    conn.commit()
+
+    df = pd.read_sql_query("SELECT * FROM predictions WHERE user_id=? ORDER BY prediction_date DESC", conn, params=(user_id,))
+    st.dataframe(df)
+
+    conn.close()
+
+# ==========================
+# منو ثابت (نه اسلایدبار)
+menu_options = ["خانه", "ورود / ثبت‌نام", "زمان‌بندی", "پیش‌بینی"]
+menu_choice = st.radio("منوی اصلی", menu_options, horizontal=True)
 
 if menu_choice == "ورود / ثبت‌نام":
     tab = st.tabs(["ورود", "ثبت‌نام"])
@@ -164,7 +160,10 @@ if menu_choice == "ورود / ثبت‌نام":
         login_page()
     with tab[1]:
         signup_page()
-elif menu_choice == "داشبورد":
-    page_home()
-elif menu_choice == "زمانبندی":
+elif menu_choice == "زمان‌بندی":
     page_schedule()
+elif menu_choice == "پیش‌بینی":
+    page_prediction()
+else:
+    st.subheader("خانه")
+    st.write("به اپلیکیشن سیبتک خوش آمدید!")
