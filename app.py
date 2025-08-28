@@ -5,6 +5,7 @@ import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
 from PIL import Image
+import io
 
 # ---------- Config ----------
 st.set_page_config(page_title="🍎 Seedling Pro", page_icon="🍎", layout="wide")
@@ -74,9 +75,12 @@ def check_password(password, hashed):
 
 # ---------- Logo ----------
 try:
-    st.image("logo.png", width=120)
+    image_data = io.BytesIO()
+    Image.new('RGB', (120, 120), color='#00796b').save(image_data, format='PNG')
+    image_data.seek(0)
+    st.image(image_data, width=120)
 except:
-    st.write("لوگو پیدا نشد")
+    st.write("لوگو نمایش داده نشد")
 
 st.markdown(f"<div class='{text_class}'><h1>سیستم مدیریت نهال سیب</h1></div>", unsafe_allow_html=True)
 
@@ -114,7 +118,7 @@ if st.session_state['user_id'] is None:
             elif check_password(password_input, r['password_hash']):
                 st.session_state['user_id'] = r['id']
                 st.session_state['username'] = r['username']
-                st.success("ورود موفق")
+                st.experimental_rerun()
             else:
                 st.error("رمز عبور اشتباه است.")
 
@@ -153,14 +157,20 @@ if st.session_state['user_id']:
             f = st.file_uploader("آپلود تصویر برگ/میوه/ساقه", type=["jpg","jpeg","png"], key="tracking_upload")
             notes = st.text_area("یادداشت")
             if st.button("ثبت اندازه‌گیری") and f:
-                image = Image.open(f)
-                result = 'Healthy'  # پایه پردازش تصویر
-                conn.execute(measurements.insert().values(user_id=user_id, date=str(datetime.today()), image_name=f.name, result=result, notes=notes))
-                st.success("اندازه‌گیری ثبت شد.")
-        sel = sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.desc())
-        df = pd.DataFrame(conn.execute(sel).mappings().all())
-        if not df.empty:
-            st.dataframe(df)
+                try:
+                    image = Image.open(f)
+                    result = 'Healthy'  # پایه پردازش تصویر
+                    conn.execute(measurements.insert().values(user_id=user_id, date=str(datetime.today()), image_name=f.name, result=result, notes=notes))
+                    st.success("اندازه‌گیری ثبت شد.")
+                except Exception as e:
+                    st.error(f"خطا در ثبت اندازه‌گیری: {e}")
+        try:
+            sel = sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date.desc())
+            df = pd.DataFrame(conn.execute(sel).mappings().all())
+            if not df.empty:
+                st.dataframe(df)
+        except Exception as e:
+            st.error(f"خطا در دریافت داده‌ها: {e}")
 
     elif menu == "📅 زمان‌بندی":
         st.markdown(f"<div class='{text_class}'><h2>زمان‌بندی آبیاری و کوددهی</h2><p>اینجا می‌توانید زمان‌بندی‌ها را مشاهده کنید.</p></div>", unsafe_allow_html=True)
@@ -173,8 +183,11 @@ if st.session_state['user_id']:
 
     elif menu == "📥 دانلود":
         st.markdown(f"<div class='{text_class}'><h2>دانلود اطلاعات</h2></div>", unsafe_allow_html=True)
-        sel = sa.select(measurements).where(measurements.c.user_id==user_id)
-        df = pd.DataFrame(conn.execute(sel).mappings().all())
-        if not df.empty:
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button("دانلود CSV", data=csv, file_name='measurements.csv', mime='text/csv')
+        try:
+            sel = sa.select(measurements).where(measurements.c.user_id==user_id)
+            df = pd.DataFrame(conn.execute(sel).mappings().all())
+            if not df.empty:
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button("دانلود CSV", data=csv, file_name='measurements.csv', mime='text/csv')
+        except Exception as e:
+            st.error(f"خطا در دانلود داده‌ها: {e}")
