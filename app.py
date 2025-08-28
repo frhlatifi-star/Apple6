@@ -1,4 +1,4 @@
-# app_sidebar.py
+# app_predict_smart.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -7,18 +7,16 @@ from PIL import Image, ImageStat
 import os, base64, bcrypt, sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
 
+# TensorFlow
+try:
+    import tensorflow as tf
+    TF_AVAILABLE = True
+except Exception:
+    TF_AVAILABLE = False
+
 st.set_page_config(page_title="سیبتک 🍎 مدیریت نهال", page_icon="🍎", layout="wide")
 
-# CSS RTL و فونت فارسی
-st.markdown("""
-<style>
-body {font-family: Vazirmatn, Tahoma, sans-serif;}
-.block-container {direction: rtl;}
-.stButton>button {background-color: #388e3c; color:white; border-radius:8px;}
-</style>
-""", unsafe_allow_html=True)
-
-# ---------- DB ----------
+# ---------- Database ----------
 DB_FILE = "users_data.db"
 engine = sa.create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 meta = MetaData()
@@ -34,6 +32,14 @@ measurements = Table('measurements', meta,
     Column('date', String), Column('height', Integer), Column('leaves', Integer),
     Column('notes', String), Column('prune_needed', Integer)
 )
+predictions_table = Table('predictions', meta,
+    Column('id', Integer, primary_key=True),
+    Column('user_id', Integer, ForeignKey('users.id')),
+    Column('file_name', String),
+    Column('result', String),
+    Column('confidence', String),
+    Column('date', String)
+)
 meta.create_all(engine)
 
 # ---------- Session ----------
@@ -43,6 +49,41 @@ if 'username' not in st.session_state: st.session_state.username = None
 # ---------- Password helpers ----------
 def hash_password(password): return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 def check_password(password, hashed): return bcrypt.checkpw(password.encode(), hashed.encode())
+
+# ---------- Load model ----------
+MODEL_PATH = "model/seedling_model.h5"
+_model = None
+_model_loaded = False
+if TF_AVAILABLE and os.path.exists(MODEL_PATH):
+    try:
+        @st.cache_resource
+        def load_model(path):
+            return tf.keras.models.load_model(path)
+        _model = load_model(MODEL_PATH)
+        _model_loaded = True
+    except Exception as e:
+        st.warning(f"خطا در بارگذاری مدل: {e}")
+
+# ---------- Heuristic fallback ----------
+def heuristic_predict(img: Image.Image):
+    img = img.convert("RGB").resize((224,224))
+    stat = ImageStat.Stat(img)
+    r,g,b = stat.mean[:3]
+    green_ratio = g/(r+g+b)
+    mean_val = np.mean(stat.mean)
+    if green_ratio<0.35 or mean_val<80:
+        return "نیاز به هرس", f"{int((0.35-green_ratio)*100+50)}%"
+    else:
+        return "نیاز به هرس نیست", f"{int(green_ratio*100)}%"
+
+# ---------- Model prediction ----------
+def predict_with_model(img: Image.Image):
+    x = np.expand_dims(np.array(img.convert("RGB").resize((224,224)))/255.0,0)
+    preds = _model.predict(x)
+    classes = ["سالم","بیمار","نیاز به هرس","کم‌آبی"]
+    idx = int(np.argmax(preds[0]))
+    confidence = int(float(np.max(preds[0]))*100)
+    return classes[idx], f"{confidence}%"
 
 # ---------- Authentication ----------
 if st.session_state.user_id is None:
@@ -79,10 +120,10 @@ if st.session_state.user_id is None:
 
 # ---------- Sidebar Menu ----------
 st.sidebar.subheader(f"خوش آمدید {st.session_state.username}")
-menu = ["🏠 خانه","🌱 پایش نهال","📈 پیش‌بینی هرس","📥 دانلود داده‌ها","🚪 خروج"]
+menu = ["🏠 خانه","🌱 پایش نهال","📈 پیش‌بینی هوشمند هرس","📥 دانلود داده‌ها","🚪 خروج"]
 choice = st.sidebar.radio("منو", menu)
 
-# ---------- Dashboard ----------
+# ---------- Pages ----------
 if choice=="🏠 خانه":
     st.header("🏠 خانه")
     with engine.connect() as conn:
@@ -106,20 +147,28 @@ elif choice=="🌱 پایش نهال":
                 ))
                 st.success("ثبت شد.")
 
-elif choice=="📈 پیش‌بینی هرس":
+elif choice=="📈 پیش‌بینی هوشمند هرس":
     st.header("آپلود تصویر نهال")
     uploaded = st.file_uploader("انتخاب تصویر", type=["jpg","jpeg","png"])
     if uploaded:
         img = Image.open(uploaded)
         st.image(img,use_container_width=True)
-        # ساده: میانگین روشنایی و درصد سبز
-        stat = ImageStat.Stat(img)
-        r,g,b = stat.mean[:3]
-        green_ratio = g/(r+g+b)
-        if green_ratio<0.35 or stat.mean[1]<80:
-            st.warning("⚠️ به نظر می‌رسد نیاز به هرس دارد")
-        else:
-            st.success("✅ نیاز به هرس نیست")
+        try:
+            if _model_loaded:
+                label,conf = predict_with_model(img)
+            else:
+                label,conf = heuristic_predict(img)
+            st.success(f"نتیجه: {label} — اعتماد: {conf}")
+            # ذخیره در DB
+            with engine.connect() as conn:
+                conn.execute(predictions_table.insert().values(
+                    user_id=st.session_state.user_id,
+                    file_name=getattr(uploaded,"name",f"img_{datetime.now().timestamp()}"),
+                    result=label, confidence=conf,
+                    date=str(datetime.now())
+                ))
+        except Exception as e:
+            st.error(f"خطا در پیش‌بینی: {e}")
 
 elif choice=="📥 دانلود داده‌ها":
     st.header("دانلود داده‌ها")
