@@ -16,6 +16,14 @@ body {
     background: linear-gradient(to right, #e0f7fa, #ffffff);
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
+.rtl {
+    direction: rtl;
+    text-align: right;
+}
+.ltr {
+    direction: ltr;
+    text-align: left;
+}
 .section-card {
     background-color: #ffffff;
     border-radius: 15px;
@@ -48,12 +56,6 @@ measurements = Table('measurements', meta,
                      Column('notes', String),
                      Column('prune_needed', Integer))
 
-schedule_table = Table('schedule', meta,
-                       Column('id', Integer, primary_key=True),
-                       Column('user_id', Integer, ForeignKey('users.id')),
-                       Column('task', String),
-                       Column('date', String))
-
 meta.create_all(engine)
 conn = engine.connect()
 
@@ -67,11 +69,12 @@ if 'demo_data' not in st.session_state: st.session_state['demo_data'] = []
 def t(fa, en):
     return en if st.session_state['lang'] == 'English' else fa
 
-# Language selection
 lang = st.sidebar.selectbox("Language / زبان", ["فارسی", "English"], index=0 if st.session_state.get('lang','فارسی')=='فارسی' else 1)
 if st.session_state.get('lang','فارسی') != lang:
     st.session_state['lang'] = lang
     st.rerun()
+
+text_class = 'rtl' if st.session_state['lang'] == 'فارسی' else 'ltr'
 
 # ---------- Password helpers ----------
 def hash_password(password):
@@ -120,7 +123,6 @@ if st.session_state['user_id'] is None:
                 st.error(t("رمز عبور اشتباه است.", "Wrong password."))
 
     else:
-        # Demo Mode
         st.header(t("حالت دمو", "Demo Mode"))
         st.info(t("در حالت دمو داده ذخیره نمی‌شود.", "In demo mode, data is not saved."))
         f = st.file_uploader(t("آپلود تصویر برگ/میوه/ساقه", "Upload leaf/fruit/stem image"), type=["jpg","jpeg","png"])
@@ -147,7 +149,7 @@ else:
 
     # ---------- Home ----------
     elif menu == t("🏠 خانه", "🏠 Home"):
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
         st.header(t("داشبورد", "Dashboard"))
         sel = sa.select(measurements).where(measurements.c.user_id==user_id)
         df = pd.DataFrame(conn.execute(sel).mappings().all())
@@ -166,7 +168,7 @@ else:
 
     # ---------- Tracking ----------
     elif menu == t("🌱 پایش", "🌱 Tracking"):
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
         st.header(t("پایش نهال", "Seedling Tracking"))
         with st.expander(t("➕ افزودن اندازه‌گیری", "➕ Add Measurement")):
             date = st.date_input(t("تاریخ", "Date"), value=datetime.today())
@@ -182,4 +184,32 @@ else:
         df = pd.DataFrame(conn.execute(sel).mappings().all())
         if not df.empty:
             st.dataframe(df)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---------- Schedule ----------
+    elif menu == t("📅 زمان‌بندی", "📅 Schedule"):
+        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
+        st.header(t("زمان‌بندی", "Schedule"))
+        st.info(t("لیست وظایف آینده شما در اینجا نمایش داده می‌شود.", "Your upcoming tasks will be shown here."))
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---------- Prediction ----------
+    elif menu == t("📈 پیش‌بینی", "📈 Prediction"):
+        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
+        st.header(t("پیش‌بینی رشد", "Growth Prediction"))
+        st.info(t("اینجا نمودار یا پیش‌بینی‌های ساده نمایش داده می‌شوند.", "Sample predictions will be shown here."))
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---------- Disease ----------
+    elif menu == t("🍎 بیماری", "🍎 Disease"):
+        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
+        st.header(t("تشخیص بیماری", "Disease Detection"))
+        st.info(t("در این بخش می‌توانید بیماری‌های احتمالی را مشاهده کنید.", "Potential diseases can be viewed here."))
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---------- Download ----------
+    elif menu == t("📥 دانلود", "📥 Download"):
+        st.markdown(f'<div class="section-card {text_class}">', unsafe_allow_html=True)
+        st.header(t("دانلود داده‌ها", "Download Data"))
+        st.info(t("می‌توانید داده‌های پایش خود را دانلود کنید.", "You can download your tracking data here."))
         st.markdown('</div>', unsafe_allow_html=True)
