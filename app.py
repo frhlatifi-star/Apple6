@@ -69,14 +69,14 @@ def predict_health(img_file):
     return "Healthy" if pred[0][0] > 0.5 else "Diseased"
 
 # ---------- Authentication ----------
-if st.session_state['user_id'] is None:
-    col1, col2 = st.columns([1,3])
-    with col1:
-        if logo:
-            st.image(logo, width=100)
-    with col2:
-        st.markdown("# 🍎 Seedling Pro")
+col1, col2 = st.columns([1,3])
+with col1:
+    if logo:
+        st.image(logo, width=100)
+with col2:
+    st.markdown("# 🍎 Seedling Pro")
 
+if st.session_state['user_id'] is None:
     mode = st.radio("حالت", ["ورود", "ثبت‌نام", "دمو"])
 
     if mode == "ثبت‌نام":
