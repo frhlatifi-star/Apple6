@@ -5,6 +5,8 @@ import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, Table, MetaData, ForeignKey
 from PIL import Image
+import matplotlib.pyplot as plt
+import io
 
 # ---------- Config ----------
 st.set_page_config(page_title="سیبتک 🍎 Seedling Pro", page_icon="🍎", layout="wide")
@@ -45,7 +47,6 @@ conn = engine.connect()
 if 'user_id' not in st.session_state: st.session_state['user_id'] = None
 if 'username' not in st.session_state: st.session_state['username'] = None
 if 'demo_data' not in st.session_state: st.session_state['demo_data'] = []
-if 'login_success' not in st.session_state: st.session_state['login_success'] = False
 
 # ---------- Password helpers ----------
 def hash_password(password):
@@ -56,12 +57,12 @@ def check_password(password, hashed):
 
 # ---------- Login / SignUp ----------
 if st.session_state['user_id'] is None:
-    # نمایش لوگو و عنوان اپ
+    # Header with logo and app name
     st.markdown(
         """
-        <div style='display:flex; align-items:center; direction:rtl;'>
-            <img src='https://i.imgur.com/4Y2E2XQ.png' width='60' style='margin-left:15px;'/>
-            <h2 style='margin:0;'>سیبتک 🍎 Seedling Pro</h2>
+        <div style='display:flex; align-items:center;'>
+            <img src='https://i.imgur.com/4Y2E2XQ.png' width='60' style='margin-right:15px;'/>
+            <h2 style='margin:0;'>سیبتک 🍎 پایش نهال</h2>
         </div>
         """, unsafe_allow_html=True
     )
@@ -97,7 +98,7 @@ if st.session_state['user_id'] is None:
             elif check_password(password, r['password_hash']):
                 st.session_state['user_id'] = r['id']
                 st.session_state['username'] = r['username']
-                st.session_state['login_success'] = True
+                st.experimental_rerun()
             else:
                 st.error("رمز عبور اشتباه است.")
 
@@ -115,13 +116,8 @@ if st.session_state['user_id'] is None:
                 df_demo = pd.DataFrame(st.session_state['demo_data'])
                 st.dataframe(df_demo)
 
-    # اجرای rerun فقط بعد از ورود موفق
-    if st.session_state.get('login_success'):
-        st.session_state['login_success'] = False
-        st.experimental_rerun()
-
+# ---------- Logged-in Menu ----------
 else:
-    # ---------- Logged-in Menu ----------
     st.sidebar.header(f"خوش آمدید، {st.session_state['username']}")
     menu = st.sidebar.selectbox("منو", ["🏠 خانه", "🌱 پایش", "📅 زمان‌بندی", "📈 پیش‌بینی", "🍎 بیماری", "📥 دانلود", "🚪 خروج"])
     user_id = st.session_state['user_id']
@@ -134,7 +130,7 @@ else:
     # ---------- Home ----------
     elif menu == "🏠 خانه":
         st.header("خانه")
-        st.write("به سیبتک 🍎 Seedling Pro خوش آمدید!")
+        st.write("به سیبتک 🍎 پایش نهال خوش آمدید!")
 
     # ---------- Tracking ----------
     elif menu == "🌱 پایش":
@@ -154,6 +150,14 @@ else:
         df = pd.DataFrame(conn.execute(sel).mappings().all())
         if not df.empty:
             st.dataframe(df)
+            # نمودار پایش
+            fig, ax = plt.subplots()
+            ax.plot(pd.to_datetime(df['date']), df['height'], marker='o', label='ارتفاع')
+            ax.set_xlabel("تاریخ")
+            ax.set_ylabel("ارتفاع (سانتی‌متر)")
+            ax.set_title("روند ارتفاع نهال‌ها")
+            ax.grid(True)
+            st.pyplot(fig)
 
     # ---------- Schedule ----------
     elif menu == "📅 زمان‌بندی":
@@ -172,11 +176,11 @@ else:
 
     # ---------- Prediction ----------
     elif menu == "📈 پیش‌بینی":
-        st.header("پیش‌بینی")
+        st.header("پیش‌بینی سلامت")
         f = st.file_uploader("آپلود تصویر برگ/میوه/ساقه", type=["jpg","jpeg","png"])
         if f:
             st.image(f, use_container_width=True)
-            st.success("پیش‌بینی: سالم")
+            st.success("پیش‌بینی: سالم (نمونه)")
             st.write("یادداشت: این نتیجه آزمایشی است.")
 
     # ---------- Disease ----------
