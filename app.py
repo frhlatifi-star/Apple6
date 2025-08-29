@@ -9,7 +9,13 @@ import base64
 import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
-import matplotlib.pyplot as plt
+
+# try import matplotlib, otherwise fallback to streamlit charts
+try:
+    import matplotlib.pyplot as plt
+    HAS_MPL = True
+except Exception:
+    HAS_MPL = False
 
 # ---------- Page Config ----------
 st.set_page_config(page_title="سیبتک 🍎 مدیریت نهال", page_icon="🍎", layout="wide")
@@ -124,7 +130,11 @@ def login_user(username, password):
         if check_password(password, r['password_hash']):
             st.session_state.user_id = r['id']
             st.session_state.username = r['username']
-            st.rerun()
+            # safe rerun
+            try:
+                st.rerun()
+            except Exception:
+                st.experimental_rerun()
             return True
         else:
             st.error("رمز عبور اشتباه است.")
@@ -169,7 +179,10 @@ with cols[-1]:
         for k in ["user_id", "username"]:
             st.session_state[k] = None
         st.session_state.menu = "🏠 خانه"
-        st.rerun()
+        try:
+            st.rerun()
+        except Exception:
+            st.experimental_rerun()
 
 menu = st.session_state.menu
 
@@ -199,16 +212,23 @@ if menu == "🏠 خانه":
         c3.metric("آخرین ارتفاع", last_height)
 
         # نمودار ارتفاع + برگ‌ها
-        fig, ax1 = plt.subplots()
-        ax1.plot(df_home['date'], df_home['height'], label="ارتفاع (cm)", linewidth=2)
-        ax2 = ax1.twinx()
-        ax2.plot(df_home['date'], df_home['leaves'], color="green", linestyle="--", label="تعداد برگ‌ها")
-
-        ax1.set_xlabel("تاریخ")
-        ax1.set_ylabel("ارتفاع (cm)")
-        ax2.set_ylabel("تعداد برگ")
-        fig.legend(loc="upper left", bbox_to_anchor=(0.1, 0.9))
-        st.pyplot(fig)
+        if HAS_MPL:
+            fig, ax1 = plt.subplots()
+            ax1.plot(df_home['date'], df_home['height'], label="ارتفاع (cm)", linewidth=2)
+            ax2 = ax1.twinx()
+            ax2.plot(df_home['date'], df_home['leaves'], color="green", linestyle="--", label="تعداد برگ‌ها")
+            ax1.set_xlabel("تاریخ")
+            ax1.set_ylabel("ارتفاع (cm)")
+            ax2.set_ylabel("تعداد برگ")
+            fig.legend(loc="upper left", bbox_to_anchor=(0.1, 0.9))
+            st.pyplot(fig)
+        else:
+            st.warning("پکیج matplotlib نصب نیست — نمایش نمودارها با چارت‌های داخلی Streamlit.")
+            # دو چارت جداگانه (ارتفاع و برگ) به عنوان fallback
+            st.subheader("ارتفاع (cm)")
+            st.line_chart(df_home.set_index('date')['height'])
+            st.subheader("تعداد برگ‌ها")
+            st.line_chart(df_home.set_index('date')['leaves'])
 
         # جدول آخرین ۱۰ رکورد
         st.subheader("آخرین اندازه‌گیری‌ها")
