@@ -13,7 +13,7 @@ from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
 # ---------- Page Config ----------
 st.set_page_config(page_title="سیبتک 🍎 مدیریت نهال", page_icon="🍎", layout="wide")
 
-# ---------- CSS / RTL & Responsive Navbar ----------
+# ---------- CSS / RTL & Navbar Small ----------
 st.markdown("""
 <style>
 .block-container { direction: rtl !important; text-align: right !important; padding: 0 2rem; background: #f1f8f6; }
@@ -22,30 +22,25 @@ body { font-family: Vazirmatn, Tahoma, sans-serif; }
 .navbar-wrap {
     display:flex;
     justify-content:center;
-    flex-wrap: wrap;  /* اگر جا کم باشد به خط بعد می‌رود */
     margin-bottom:12px;
-    gap: 6px;
+    flex-wrap: nowrap;  /* همه دکمه‌ها یک خط */
 }
 .nav-item {
     background: #2e7d32;
     color: white;
-    padding: 6px 12px;
+    padding: 4px 10px;  /* کوچک‌تر شد */
+    margin: 0 4px;
     border-radius: 6px;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;    /* کوچک‌تر شد */
     text-align: center;
     cursor: pointer;
     display: inline-block;
-    white-space: nowrap;
 }
 .nav-item:hover { background: #1b5e20; }
 .nav-item.active { background: #1b5e20; }
 
 .card { background: #ffffff; padding: 1rem; border-radius: 12px; margin-bottom:10px; box-shadow:0 4px 8px rgba(0,0,0,0.1);}
-
-@media only screen and (max-width: 768px) {
-    .nav-item { padding: 4px 8px; font-size: 12px; }
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,17 +93,17 @@ def app_header():
         try:
             with open(logo_path, "rb") as f:
                 encoded = base64.b64encode(f.read()).decode()
-            img_html = f"<img src='data:image/png;base64,{encoded}' width='40' style='border-radius:8px;margin-left:8px;'>"
+            img_html = f"<img src='data:image/png;base64,{encoded}' width='32' style='border-radius:8px;margin-left:8px;'>"
         except Exception:
-            img_html = "<div style='font-size:28px;'>🍎</div>"
+            img_html = "<div style='font-size:24px;'>🍎</div>"
     else:
-        img_html = "<div style='font-size:28px;'>🍎</div>"
+        img_html = "<div style='font-size:24px;'>🍎</div>"
 
     st.markdown(f"""
     <div style='display:flex;align-items:center;margin:8px 0;'>
         {img_html}
         <div>
-            <h3 style='margin:0; font-size:20px;'>سیبتک</h3>
+            <h3 style='margin:0'>سیبتک</h3>
             <small style='color:#555; font-size:12px;'>مدیریت و پایش نهال</small>
         </div>
     </div>
@@ -179,11 +174,13 @@ if st.session_state.user_id is None:
 
 user_id = st.session_state.user_id
 
-# ---------- Responsive Top Navbar ----------
+# ---------- Top Navbar ----------
 menu_items = ["🏠 خانه", "🌱 پایش نهال", "📈 پیش‌بینی هرس", "📥 دانلود داده‌ها", "🚪 خروج"]
+
 cols = st.columns(len(menu_items))
 for i, item in enumerate(menu_items):
     with cols[i]:
+        style = "active" if st.session_state.menu == item else "inactive"
         if st.button(item, key=f"nav_{i}"):
             st.session_state.menu = item
 
