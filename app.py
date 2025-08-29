@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -10,13 +9,6 @@ import bcrypt
 import sqlalchemy as sa
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
 
-# try import matplotlib, otherwise fallback to streamlit charts
-try:
-    import matplotlib.pyplot as plt
-    HAS_MPL = True
-except Exception:
-    HAS_MPL = False
-
 # ---------- Page Config ----------
 st.set_page_config(page_title="سیبتک 🍎 مدیریت نهال", page_icon="🍎", layout="wide")
 
@@ -25,6 +17,12 @@ st.markdown("""
 <style>
 .block-container { direction: rtl !important; text-align: right !important; padding: 0 2rem; background: #f1f8f6; }
 body { font-family: Vazirmatn, Tahoma, sans-serif; }
+
+.navbar-wrap { display:flex; justify-content:center; margin-bottom:16px; flex-wrap: nowrap; }
+.nav-item { background: #2e7d32; color: white; padding: 6px 12px; margin: 0 4px; border-radius: 6px;
+            font-weight: 600; font-size: 14px; text-align: center; cursor: pointer; display: inline-block; }
+.nav-item:hover { background: #1b5e20; }
+.nav-item.active { background: #1b5e20; }
 .card { background: #ffffff; padding: 1rem; border-radius: 12px; margin-bottom:10px; box-shadow:0 4px 8px rgba(0,0,0,0.1);}
 </style>
 """, unsafe_allow_html=True)
@@ -130,11 +128,7 @@ def login_user(username, password):
         if check_password(password, r['password_hash']):
             st.session_state.user_id = r['id']
             st.session_state.username = r['username']
-            # safe rerun
-            try:
-                st.rerun()
-            except Exception:
-                st.experimental_rerun()
+            st.rerun()
             return True
         else:
             st.error("رمز عبور اشتباه است.")
@@ -179,10 +173,7 @@ with cols[-1]:
         for k in ["user_id", "username"]:
             st.session_state[k] = None
         st.session_state.menu = "🏠 خانه"
-        try:
-            st.rerun()
-        except Exception:
-            st.experimental_rerun()
+        st.rerun()
 
 menu = st.session_state.menu
 
@@ -191,18 +182,16 @@ if menu == "🏠 خانه":
     st.header("خانه")
     try:
         with engine.connect() as conn:
-            ms = conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id)).mappings().all()
+            m_sel = sa.select(measurements).where(measurements.c.user_id==user_id)
+            ms = conn.execute(m_sel).mappings().all()
+        df_home = pd.DataFrame(ms)
     except Exception as e:
         st.error(f"خطا هنگام خواندن اندازه‌گیری‌ها: {e}")
-        ms = []
+        df_home = pd.DataFrame()
 
-    if ms:
-        df_home = pd.DataFrame(ms)
-        df_home['date'] = pd.to_datetime(df_home['date'], errors="coerce")
-        df_home = df_home.sort_values('date')
-
-        # آمار کلیدی
-        avg_growth = df_home['height'].diff().mean().round(2)
+    if not df_home.empty:
+        df_home['date'] = pd.to_datetime(df_home['date'])
+        avg_growth = round(df_home['height'].diff().mean(), 2) if not df_home.empty else 0
         max_height = df_home['height'].max()
         last_height = df_home['height'].iloc[-1]
 
@@ -211,32 +200,9 @@ if menu == "🏠 خانه":
         c2.metric("بیشترین ارتفاع", max_height)
         c3.metric("آخرین ارتفاع", last_height)
 
-        # نمودار ارتفاع + برگ‌ها
-        if HAS_MPL:
-            fig, ax1 = plt.subplots()
-            ax1.plot(df_home['date'], df_home['height'], label="ارتفاع (cm)", linewidth=2)
-            ax2 = ax1.twinx()
-            ax2.plot(df_home['date'], df_home['leaves'], color="green", linestyle="--", label="تعداد برگ‌ها")
-            ax1.set_xlabel("تاریخ")
-            ax1.set_ylabel("ارتفاع (cm)")
-            ax2.set_ylabel("تعداد برگ")
-            fig.legend(loc="upper left", bbox_to_anchor=(0.1, 0.9))
-            st.pyplot(fig)
-        else:
-            st.warning("پکیج matplotlib نصب نیست — نمایش نمودارها با چارت‌های داخلی Streamlit.")
-            # دو چارت جداگانه (ارتفاع و برگ) به عنوان fallback
-            st.subheader("ارتفاع (cm)")
-            st.line_chart(df_home.set_index('date')['height'])
-            st.subheader("تعداد برگ‌ها")
-            st.line_chart(df_home.set_index('date')['leaves'])
-
-        # جدول آخرین ۱۰ رکورد
-        st.subheader("آخرین اندازه‌گیری‌ها")
-        df_show = df_home[['date','height','leaves','prune_needed','notes']].tail(10)
-        df_show['prune_needed'] = df_show['prune_needed'].map({0:"خیر",1:"بله"})
-        st.dataframe(df_show, use_container_width=True)
+        st.line_chart(df_home.set_index('date')['height'])
     else:
-        st.info("هنوز داده‌ای ثبت نشده است.")
+        st.info("هیچ داده‌ای برای نمایش وجود ندارد.")
 
 elif menu == "🌱 پایش نهال":
     st.header("پایش نهال")
@@ -258,28 +224,23 @@ elif menu == "🌱 پایش نهال":
                         prune_needed=int(bool(prune))
                     ))
                 st.success("ثبت شد.")
+                st.rerun()
             except Exception as e:
                 st.error(f"خطا در ثبت اندازه‌گیری: {e}")
 
     # نمایش داده‌ها
-    with engine.connect() as conn:
-        rows = conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id)).mappings().all()
-    if rows:
-        df = pd.DataFrame(rows)
-        df['date'] = pd.to_datetime(df['date'], errors="coerce")
-        df = df.sort_values('date')
-
-        # فیلتر تاریخ
-        min_d, max_d = df['date'].min(), df['date'].max()
-        start, end = st.date_input("بازه تاریخی", [min_d, max_d])
-        df = df[(df['date'] >= pd.to_datetime(start)) & (df['date'] <= pd.to_datetime(end))]
-
-        st.dataframe(df[['date','height','leaves','prune_needed','notes']], use_container_width=True)
-
-        if not df.empty:
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date)).mappings().all()
+        if rows:
+            df = pd.DataFrame(rows)
+            df['date'] = pd.to_datetime(df['date'])
+            st.dataframe(df[['date','height','leaves','notes','prune_needed']])
             st.line_chart(df.set_index('date')['height'])
-    else:
-        st.info("هیچ داده‌ای برای نمایش وجود ندارد.")
+        else:
+            st.info("هیچ داده‌ای برای نمایش وجود ندارد.")
+    except Exception as e:
+        st.error(f"خطا در بارگذاری داده‌ها: {e}")
 
 elif menu == "📈 پیش‌بینی هرس":
     st.header("پیش‌بینی نیاز به هرس (بارگذاری تصویر)")
@@ -305,11 +266,11 @@ elif menu == "📥 دانلود داده‌ها":
     try:
         with engine.connect() as conn:
             rows = conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id)).mappings().all()
-            if rows:
-                df = pd.DataFrame(rows)
-                csv = df.to_csv(index=False).encode('utf-8-sig')
-                st.download_button("دانلود اندازه‌گیری‌ها (CSV)", csv, "measurements.csv", "text/csv")
-            else:
-                st.info("هیچ داده‌ای برای دانلود وجود ندارد.")
+        if rows:
+            df = pd.DataFrame(rows)
+            csv = df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("دانلود اندازه‌گیری‌ها (CSV)", csv, "measurements.csv", "text/csv")
+        else:
+            st.info("هیچ داده‌ای برای دانلود وجود ندارد.")
     except Exception as e:
         st.error(f"خطا در آماده‌سازی فایل دانلود: {e}")
