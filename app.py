@@ -22,7 +22,7 @@ body { font-family: Vazirmatn, Tahoma, sans-serif; }
 .navbar-wrap {
     display:flex;
     justify-content:center;
-    margin-bottom:12px;
+    margin-bottom:16px;
     flex-wrap: nowrap;  /* همه دکمه‌ها یک خط */
 }
 .nav-item {
@@ -39,7 +39,6 @@ body { font-family: Vazirmatn, Tahoma, sans-serif; }
 }
 .nav-item:hover { background: #1b5e20; }
 .nav-item.active { background: #1b5e20; }
-
 .card { background: #ffffff; padding: 1rem; border-radius: 12px; margin-bottom:10px; box-shadow:0 4px 8px rgba(0,0,0,0.1);}
 </style>
 """, unsafe_allow_html=True)
@@ -93,18 +92,18 @@ def app_header():
         try:
             with open(logo_path, "rb") as f:
                 encoded = base64.b64encode(f.read()).decode()
-            img_html = f"<img src='data:image/png;base64,{encoded}' width='32' style='border-radius:8px;margin-left:8px;'>"
+            img_html = f"<img src='data:image/png;base64,{encoded}' width='48' style='border-radius:12px;margin-left:10px;'>"
         except Exception:
-            img_html = "<div style='font-size:24px;'>🍎</div>"
+            img_html = "<div style='font-size:32px;'>🍎</div>"
     else:
-        img_html = "<div style='font-size:24px;'>🍎</div>"
+        img_html = "<div style='font-size:32px;'>🍎</div>"
 
     st.markdown(f"""
-    <div style='display:flex;align-items:center;margin:8px 0;'>
+    <div style='display:flex;align-items:center;margin:10px 0;'>
         {img_html}
         <div>
-            <h3 style='margin:0'>سیبتک</h3>
-            <small style='color:#555; font-size:12px;'>مدیریت و پایش نهال</small>
+            <h2 style='margin:0'>سیبتک</h2>
+            <small style='color:#555'>مدیریت و پایش نهال</small>
         </div>
     </div>
     """, unsafe_allow_html=True)
