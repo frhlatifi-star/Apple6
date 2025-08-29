@@ -243,23 +243,60 @@ elif menu == "🌱 پایش نهال":
         st.error(f"خطا در بارگذاری داده‌ها: {e}")
 
 elif menu == "📈 پیش‌بینی هرس":
+    import cv2
     st.header("پیش‌بینی نیاز به هرس (بارگذاری تصویر)")
-    uploaded = st.file_uploader("آپلود تصویر نهال", type=["jpg","jpeg","png"])
-    if uploaded:
+
+    uploaded_files = st.file_uploader(
+        "آپلود تصویر نهال (تک یا چندگانه)", 
+        type=["jpg","jpeg","png"], 
+        accept_multiple_files=True
+    )
+
+    for uploaded in uploaded_files:
         try:
-            img = Image.open(uploaded)
-            st.image(img, use_container_width=True)
+            img = Image.open(uploaded).convert("RGB")
+            st.image(img, use_container_width=True, caption=uploaded.name)
+
             arr = np.array(img)
-            if arr.ndim == 3 and arr.shape[2] >= 3:
-                r,g,b = arr[:,:,0], arr[:,:,1], arr[:,:,2]
-                yellow_ratio = float(((r>g)&(g>=b)).mean())
-                green_ratio = float(((g>r+10)&(g>b+10)).mean())
-                needs_prune = green_ratio < 0.12 or yellow_ratio > 0.25
-                st.success(f"نیاز به هرس: {'بله' if needs_prune else 'خیر'}")
-            else:
-                st.info("تصویر بارگذاری شده برای تحلیل مناسب نیست.")
+
+            # تحلیل رنگ
+            r, g, b = arr[:,:,0], arr[:,:,1], arr[:,:,2]
+            yellow_ratio = float(((r>g)&(g>=b)).mean())
+            green_ratio = float(((g>r+10)&(g>b+10)).mean())
+
+            # محاسبه نیاز به هرس و احتمال
+            needs_prune = green_ratio < 0.12 or yellow_ratio > 0.25
+            probability = min(1.0, max(0.0, 0.5 + yellow_ratio - green_ratio))
+
+            # نمایش کارت حرفه‌ای
+            color = "#4CAF50" if not needs_prune else "#FF9800"
+            icon = "✅" if not needs_prune else "⚠️"
+            st.markdown(f"""
+            <div style='background:{color}; padding:15px; border-radius:12px; text-align:center; font-size:18px; color:white; margin-bottom:10px;'>
+                {icon} نیاز به هرس: {'بله' if needs_prune else 'خیر'} <br>
+                احتمال: {probability*100:.1f}%
+            </div>
+            """, unsafe_allow_html=True)
+
+            # نمودار رشد و رنگ برگ‌ها (تاریخچه فرضی یا مقایسه)
+            # اگر داده‌های پایش قبلی موجود باشد
+            try:
+                with engine.connect() as conn:
+                    rows = conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date)).mappings().all()
+                if rows:
+                    df_hist = pd.DataFrame(rows)
+                    df_hist['date'] = pd.to_datetime(df_hist['date'])
+                    st.subheader("نمودار رشد و رنگ برگ‌ها")
+                    chart_data = pd.DataFrame({
+                        "ارتفاع": df_hist['height'],
+                        "تعداد برگ‌ها": df_hist['leaves']
+                    }, index=df_hist['date'])
+                    st.line_chart(chart_data)
+            except Exception:
+                pass
+
         except Exception as e:
-            st.error(f"خطا در پردازش تصویر: {e}")
+            st.error(f"خطا در پردازش تصویر {uploaded.name}: {e}")
 
 elif menu == "📥 دانلود داده‌ها":
     st.header("دانلود داده‌ها")
