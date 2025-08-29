@@ -243,7 +243,6 @@ elif menu == "🌱 پایش نهال":
         st.error(f"خطا در بارگذاری داده‌ها: {e}")
 
 elif menu == "📈 پیش‌بینی هرس":
-    import cv2
     st.header("پیش‌بینی نیاز به هرس (بارگذاری تصویر)")
 
     uploaded_files = st.file_uploader(
@@ -278,15 +277,14 @@ elif menu == "📈 پیش‌بینی هرس":
             </div>
             """, unsafe_allow_html=True)
 
-            # نمودار رشد و رنگ برگ‌ها (تاریخچه فرضی یا مقایسه)
-            # اگر داده‌های پایش قبلی موجود باشد
+            # نمودار رشد و رنگ برگ‌ها از داده‌های قبلی
             try:
                 with engine.connect() as conn:
                     rows = conn.execute(sa.select(measurements).where(measurements.c.user_id==user_id).order_by(measurements.c.date)).mappings().all()
                 if rows:
                     df_hist = pd.DataFrame(rows)
                     df_hist['date'] = pd.to_datetime(df_hist['date'])
-                    st.subheader("نمودار رشد و رنگ برگ‌ها")
+                    st.subheader("نمودار رشد و تعداد برگ‌ها")
                     chart_data = pd.DataFrame({
                         "ارتفاع": df_hist['height'],
                         "تعداد برگ‌ها": df_hist['leaves']
